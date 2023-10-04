@@ -1,0 +1,19 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="Untitled">
+   	<Sequence>
+		<Script code="mission_ongoing:=true" />
+		<Parallel failure_count="1"
+		      success_count="-1">
+			<PowerQR _onSuccess="mission_ongoing:=false" weight="{energy_weight}" in_picture_rate="{id_picture_rate}" metric="{energy_metric}" mean_metric="{energy_mean_metric}" in_odom="{odometry}" objs_identified="{objects_detected}">
+				<Sequence>
+					<Script code="mission_weight:=1.0; current_position:=1.0; energy_weight=1.0; energy_metric:=1.0; mission_metric:=1.0" />
+					<TaskEfficiencyQR weight="{mission_weight}" rob_position="{current_position}" 			objs_identified="{objects_detected}" metric="{mission_metric}" mean_metric="{mission_mean_metric}" >
+						<IDfd objs_identified="{objects_detected}" out_time_elapsed="{id_time_elapsed}" out_picture_rate="{id_picture_rate}" variable_parameters="{id_var_params}" out_det_threshold="{id_det_threshold}"/>
+					</TaskEfficiencyQR>
+				</Sequence>
+			</PowerQR>
+			<Bandit _while="mission_ongoing" bandit_name="EXP3" />
+		</Parallel>
+   	</Sequence>
+  </BehaviorTree>
+</root>

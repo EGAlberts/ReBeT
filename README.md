@@ -27,9 +27,10 @@ In darknet_ros/launch/darknet_ros.launch.py you change node_executable and node_
 
 6. Install masced_bandits python library: `pip install masced-bandits`
 
-7. Run colcon build in the root of your workspace folder to build all the packages.
+7. Run `colcon build` in the root of your workspace folder to build all the packages.
 
-## Run
-We provide a number of scripts to easily reproduce our experiments. Simply use scripts/experiment1 and scripts/experiment2 to reproduce the two experiments from the paper. If you want do one simple run, you can use scripts/<name_of_manager>manager.sh with either UCB, Greedy, Random, or Reactive.
+## Reproduction
+We provide a singular script which runs all the experiments from the paper. Keep in mind that actually running them in succession take as long as 120 hours.
+To run them you use the command from within the root of your workspace folder `./scripts/SEAMS24Reproduction.sh`
 
-If you'd like to change anything about the experiments, just open up the .sh files you're running as some parameters are overriden there, and for those that aren't check the rebet_config.yaml file in the src/rebet/config folder.
+The result of each run get placed in a csv inside the scripts folder called rebet_results.csv. Inquire the code inside the arborist node to see what each field is and where it comes from. If the run involves a bandit is also records its progress to a csv called bandit_report.csv in the same foldeer.

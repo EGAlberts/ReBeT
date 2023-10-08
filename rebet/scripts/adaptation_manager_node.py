@@ -4,7 +4,7 @@ from rclpy.node import Node
 from rebet_msgs.srv import GetQR, GetVariableParams, SetBlackboard
 from rcl_interfaces.msg import Parameter
 from std_msgs.msg import Float64
-from rebet_msgs.msg import AdaptationState, NodeConfiguration, QRValue
+from rebet_msgs.msg import AdaptationState, Configuration, QRValue
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from itertools import product
@@ -112,6 +112,7 @@ class AdaptationManager(Node):
         return all_the_qrs
     
     def get_system_vars(self):
+        param_to_node = {}
         self.get_logger().info("Calling VariableParams service client...")
         
         while not self.cli_var.wait_for_service(timeout_sec=1.0):
@@ -119,50 +120,39 @@ class AdaptationManager(Node):
         
         response = self.cli_var.call(self.req_var)
 
-        #self.get_logger().info('Result of it ' + str(response.variables_in_tree))
+        self.get_logger().info('get vars Result of it ' + str(response.variables_in_tree))
 
         possible_configurations = []
 
+        possible_configurations = []
         list_of_list_param = []
+        for knob in response.variables_in_tree.variable_parameters:
+            decomposed = []
+            #knob is a msg of type VariableParameter is name-potential_values pair representing a thing that can change about the current state of the system.
+            for pos_val in knob.possible_values:
+                param = Parameter()
+                param.name = knob.name
+                param.value = pos_val
+                param_to_node[str((param.name, param.value))] = knob.node_name
+                decomposed.append(param)
+            list_of_list_param.append(decomposed)
         
+        self.get_logger().info('list of list param ' + str(list_of_list_param))
+        possible_configurations = list(product(*list_of_list_param))
+        #here's where you'd apply constraints to remove invalid configurations
+        print(len(possible_configurations))
+        print(possible_configurations)
         config_list = []
-
-        for variable_parameters_msg in response.variables_in_tree:
-            node_name = variable_parameters_msg.server_name
-
-
-
-            for knob in variable_parameters_msg.variable_parameters:
-                decomposed = []
-                #knob is a msg of type VariableParameter is name-potential_values pair representing a thing that can change about the current state of the system.
-                for pos_val in knob.possible_values:
-                    param = Parameter()
-                    param.name = knob.name
-                    param.value = pos_val
-                    decomposed.append(param)
-                list_of_list_param.append(decomposed)
-            
-            # self.get_logger().info('list of list param ' + str(list_of_list_param))
-
-            possible_configurations = list(product(*list_of_list_param))
-
-            #here's where you'd apply constraints to remove invalid configurations
-
-            print(len(possible_configurations))
-            print(possible_configurations)
-
-            for possible_config in possible_configurations:
-                if(len(possible_config) != 0):
-                    config_msg = NodeConfiguration()
-                    config_msg.node_name = node_name
-                    config_msg.configuration_parameters = list(possible_config)
-                    config_list.append(config_msg)
-
-            #The arms should consists of a list of Parameter, name value pairs of each parameter given.
-
-        self.get_logger().info('\n\n\n\n\n\n\nconfig_list ' + str(config_list))
-        
+        for possible_config in possible_configurations:
+            if(len(possible_config) != 0):
+                possible_config_list = list(possible_config)
+                config_msg = Configuration()
+                config_msg.node_names = [param_to_node[str((param.name, param.value))] for param in possible_config_list]
+                config_msg.configuration_parameters = possible_config
+                config_list.append(config_msg)
+        #The arms should consists of a list of Parameter, name value pairs of each parameter given.
         return config_list
+
 
 
 
@@ -188,17 +178,17 @@ class AdaptationManager(Node):
 def main(args=None):
     rclpy.init()
 
-    util_manage_node = AdaptationManager()
+    adapt_manage_node = AdaptationManager()
 
     mt_executor = MultiThreadedExecutor()
-    mt_executor.add_node(util_manage_node)
+    mt_executor.add_node(adapt_manage_node)
     
     mt_executor.spin()
    
 
     
     
-    util_manage_node.destroy_node()
+    adapt_manage_node.destroy_node()
     rclpy.shutdown()
 
 

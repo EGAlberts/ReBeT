@@ -17,12 +17,9 @@ find_package(rcl_interfaces REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "action/Bandit.action"
   "action/BehaviorTree.action"
   "action/SLAM.action"
   "action/Identify.action"
-  "action/Reactive.action"
-  "action/Random.action"
   "srv/SetBlackboard.srv"
   "srv/GetBlackboard.srv"
   "srv/GetQR.srv"
@@ -34,7 +31,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/VariableParameter.msg"
   "msg/VariableParameters.msg"
   "msg/AdaptationState.msg"
-  "msg/NodeConfiguration.msg"
+  "msg/Configuration.msg"
   "msg/QRValue.msg"
   "msg/SystemAttributeValue.msg"
   "msg/SystemAttributeType.msg"

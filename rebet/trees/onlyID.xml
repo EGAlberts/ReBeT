@@ -1,23 +1,14 @@
 <root BTCPP_format="4">
   <BehaviorTree ID="Untitled">
-   	<Sequence>
-		<Script code="mission_ongoing:=true"/>
-		<Parallel failure_count="1"
-		      success_count="-1">
-			<PowerQR weight="{power_weight}" metric="{power_metric}" objs_identified="{objects_detected}">
-				<Sequence>
-					<Script code="task_weight:=1.0; current_position:=1.0; power_weight=1.0; power_metric:=1.0; task_metric:=1.0" />
-					<TaskEfficiencyQR weight="{task_weight}" objs_identified="{objects_detected}" metric="{task_metric}" mean_metric="{task_mean_metric}" >
-						<IDfd objs_identified="{objects_detected}" out_time_elapsed="{id_time_elapsed}" out_picture_rate="{id_picture_rate}" variable_parameters="{id_var_params}" out_det_threshold="{id_det_threshold}"/>
+  	<Sequence>
+    		<PowerQR weight="{power_weight}" metric="{power_metric}" objs_identified="{objects_detected}"  in_odom="{odometry}" in_picture_rate="{id_picture_rate}" mean_metric="{power_mean_metric}">
+			<Sequence>
+				<Script code="task_weight:=1.0; power_weight=1.0; power_metric:=1.0; task_metric:=1.0" />
+				<TaskEfficiencyQR weight="{task_weight}" objs_identified="{objects_detected}" metric="{task_metric}" 			mean_metric="{task_mean_metric}" >
+					<IDfd objs_identified="{objects_detected}" out_time_elapsed="{id_time_elapsed}" out_picture_rate="{id_picture_rate}" variable_parameters="{id_var_params}" out_det_threshold="{id_det_threshold}"/>
 					</TaskEfficiencyQR>
 				</Sequence>
 			</PowerQR>
-			<AlwaysSuccess />
-		</Parallel>
    	</Sequence>
   </BehaviorTree>
 </root>
-
-
-
-

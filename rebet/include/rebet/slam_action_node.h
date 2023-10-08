@@ -34,7 +34,7 @@ public:
   // using RosActionNode::providedBasicPorts()
   static PortsList providedPorts()
   {
-    return providedBasicPorts({OutputPort<geometry_msgs::msg::PoseStamped>("rob_position")});
+    return providedBasicPorts({});
   }
 
   // This is called when the TreeNode is ticked and it should
@@ -97,7 +97,6 @@ public:
 
     //getInput("rb_name", some_text);
     std::stringstream sstwo;
-    setOutput("rob_position", feedback->current_pose); 
     //of note is that miraculously the BT CPP knows to send this to the current_position field of the blackboard, which is picked up in an QR, because it is specified in the BT xml
 
     sstwo << "Port info received: ";

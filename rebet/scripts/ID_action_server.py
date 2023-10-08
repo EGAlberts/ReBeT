@@ -291,7 +291,7 @@ class IdentifyActionServer(Node):
                 # self.get_logger().info('pt[0]: {0} pt[1]: {1}  resolution {2}'.format(pt[0], pt[1], self.map.info.resolution))
 
         points_to_visit = []
-
+        self.get_logger().info("\n\n\n The number of obstacles is " + str(len(obstacles)) + "\n\n\n\n")
         for obstacle in obstacles:
             all_the_ys = [pt[0] for pt in obstacle] 
             all_the_xs = [pt[1] for pt in obstacle]

@@ -38,9 +38,9 @@ ament_python_install_package(${PROJECT_NAME})
 
 # Install Python executables
 install(PROGRAMS
-  scripts/reactive_action_server.py
-  scripts/random_action_server.py
-  scripts/bandit_action_server.py
+  scripts/reactive_adaptation_logic.py
+  scripts/random_adaptation_logic.py
+  scripts/bandit_adaptation_logic.py
   scripts/SLAM_action_server.py
   scripts/ID_action_server.py
   scripts/blackboard_set_client.py

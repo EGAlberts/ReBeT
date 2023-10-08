@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstdio>
 #include <chrono>
 #include <functional>
@@ -32,12 +34,12 @@ public:
     }
 
     template <class T>
-    void registerAdaptations(std::vector<T> param_values, std::string param_name)
+    void registerAdaptations(std::vector<T> param_values, std::string param_name, std::string server_name)
     {
         rebet_msgs::msg::VariableParameter variable_param = rebet_msgs::msg::VariableParameter();
 
         variable_param.name = param_name;
-
+        variable_param.node_name = server_name;
         for (T val : param_values) {
             rclcpp::ParameterValue par_val = rclcpp::ParameterValue(val);
             variable_param.possible_values.push_back(par_val.to_value_msg());

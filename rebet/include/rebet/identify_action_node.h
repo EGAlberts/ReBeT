@@ -36,12 +36,16 @@ public:
                   const RosNodeParams& params)
     : VariableActionNode<ID>(name, conf, params)
   {
-    std::cout << "Someone made me (an ID Action Node) \n\n\n\n\n\n" << std::endl;
+    std::cout << "Someone made me (an ID Action Nodee)" << std::endl;
+    RCLCPP_INFO(node_->get_logger(), "name of the node");
+    RCLCPP_INFO(node_->get_logger(), node_->get_name());
+
+
     
-    _var_params.server_name = ACTION_SRVR;
+    // _var_params.server_name = ACTION_SRVR;
 
     std::vector<int> pc_rate_values{1, 3, 5, 7};
-    registerAdaptations<int>(pc_rate_values, PICTURE_RT_PARAM);
+    registerAdaptations<int>(pc_rate_values, PICTURE_RT_PARAM, ACTION_SRVR);
     
     setOutput(VARIABLE_PARAMS, _var_params);
 

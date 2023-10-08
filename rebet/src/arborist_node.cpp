@@ -8,7 +8,6 @@
 #include "behaviortree_ros2/bt_action_node.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
-#include "rebet_msgs/action/bandit.hpp"
 #include "rebet_msgs/action/behavior_tree.hpp"
 
 #include "rebet_msgs/srv/set_blackboard.hpp"
@@ -24,9 +23,7 @@
 
 
 #include "rebet/system_attribute_value.hpp"
-#include "rebet/bandit_action_node.h"
-#include "rebet/reactive_action_node.h"
-#include "rebet/random_action_node.h"
+
 #include "rebet/slam_action_node.h"
 #include "rebet/identify_action_node.h"
 
@@ -58,8 +55,8 @@ public:
   using GoalHandleBTAction = rclcpp_action::ServerGoalHandle<BTAction>;
   const std::string MSN_MAX_OBJ_PS_NAME = "max_objects_per_second";
   const std::string ENG_MAX_PIC_PS_NAME = "max_pictures_per_second";
-  const std::string MSN_WINDOW_LEN_NAME = "mission_qa_window";
-  const std::string ENG_WINDOW_LEN_NAME = "energy_qa_window";
+  const std::string TSK_WINDOW_LEN_NAME = "task_qa_window";
+  const std::string POW_WINDOW_LEN_NAME = "power_qa_window";
 
   const std::string BT_NAME_PARAM = "bt_filename";
   const std::string EXP_NAME_PARAM = "experiment_name";
@@ -94,9 +91,6 @@ public:
       std::bind(&Arborist::handle_tree_accepted, this, _1));
 
       //I suppose here you register all the possible custom nodes, and the determination as to whether they are actually used lies in the xml tree provided.
-      registerActionClient<BanditAction>(factory, "bt_bandit_client", "bandit", "Bandit");
-      registerActionClient<ReactiveAction>(factory, "bt_reactive_client", "reactive", "Reactive");
-      registerActionClient<RandomAction>(factory, "bt_random_client", "random", "Random");
 
       registerActionClient<SLAMAction>(factory, "bt_slam_client", "slam", "SLAMfd");
       registerActionClient<IdentifyAction>(factory, "bt_identify_client", "identify", "IDfd");
@@ -119,8 +113,8 @@ public:
 
       this->declare_parameter(MSN_MAX_OBJ_PS_NAME, 0.14);
       this->declare_parameter(ENG_MAX_PIC_PS_NAME, 0.4);
-      this->declare_parameter(MSN_WINDOW_LEN_NAME, 8);
-      this->declare_parameter(ENG_WINDOW_LEN_NAME, 8);
+      this->declare_parameter(TSK_WINDOW_LEN_NAME, 8);
+      this->declare_parameter(POW_WINDOW_LEN_NAME, 8);
       
       
 
@@ -128,8 +122,8 @@ public:
       double max_objs_ps = this->get_parameter(MSN_MAX_OBJ_PS_NAME).as_double();
 
       float max_pics_ps = this->get_parameter(ENG_MAX_PIC_PS_NAME).as_double();
-      int msn_window_length = this->get_parameter(MSN_WINDOW_LEN_NAME).as_int();
-      int eng_window_length = this->get_parameter(ENG_WINDOW_LEN_NAME).as_int();
+      int msn_window_length = this->get_parameter(TSK_WINDOW_LEN_NAME).as_int();
+      int eng_window_length = this->get_parameter(POW_WINDOW_LEN_NAME).as_int();
 
 
 
@@ -155,7 +149,10 @@ public:
   template <class T>
   void registerActionClient(BehaviorTreeFactory& factory, std::string client_name, std::string action_name, std::string name_in_xml)
   {
-    auto nh = std::make_shared<rclcpp::Node>(client_name);
+    auto options = rclcpp::NodeOptions().use_global_arguments(false); //https://answers.ros.org/question/316870/ros2-composition-and-node-names-with-launch-files/?answer=316925#post-id-316925
+    auto nh = std::make_shared<rclcpp::Node>(client_name, options);
+
+
 
     RosNodeParams params;
     params.nh = nh;
@@ -316,10 +313,10 @@ private:
   void handle_get_var_params(const std::shared_ptr<GetVParams::Request> request,
         std::shared_ptr<GetVParams::Response> response)
   {
+  
     auto var_nodes = get_tree_variable_acs();
     for (auto & node : var_nodes) 
     {
-
       if(node->status() == NodeStatus::RUNNING) //ensures that the actions are currently in effect.
       {
       auto node_config = node->config();
@@ -337,19 +334,15 @@ private:
       auto var_bb_value = tree.rootBlackboard()->get<VariableParameters>((std::string)TreeNode::stripBlackboardPointer(var_params->second));
       //Each variable action node can provide one or more changeable parameters.
 
-
-      // for (auto var_param : var_bb_value.variable_parameters)
-      // {
-      //   var_params_msg.variable_parameters.push_back(var_param);
-
-      // }
-      response->variables_in_tree.push_back(var_bb_value);
-
-
+      for (auto var_param : var_bb_value.variable_parameters)
+      {
+        response->variables_in_tree.variable_parameters.push_back(var_param); //We put all of these parameters that may change into a singular list. 
+        //Potentially we may want a list of these lists to keep them distinct.. 
       }
-
+      }
     }
   }
+  
 
   
 
@@ -446,8 +439,8 @@ private:
           //Reporting on mission
           float id_time_elapsed = tree.rootBlackboard()->get<float>("id_time_elapsed");
           int32_t id_picture_rate = tree.rootBlackboard()->get<int32_t>("id_picture_rate");
-          float avg_mission_metric = tree.rootBlackboard()->get<float>("mission_mean_metric");
-          float avg_energy_metric = tree.rootBlackboard()->get<float>("energy_mean_metric");
+          float avg_task_metric = tree.rootBlackboard()->get<float>("task_mean_metric");
+          float avg_power_metric = tree.rootBlackboard()->get<float>("power_mean_metric");
 
           int32_t id_det_threshold = tree.rootBlackboard()->get<int32_t>("id_det_threshold");
           auto average_utility = tree.rootBlackboard()->get<std::string>("average_utility");
@@ -471,8 +464,8 @@ private:
           // Insert the data to file
           fout << current_time << ", " 
               << id_picture_rate << ", "
-              << avg_mission_metric << ", "
-              << avg_energy_metric << ", "
+              << avg_task_metric << ", "
+              << avg_power_metric << ", "
               << id_time_elapsed << ", "
               << id_det_threshold << ", "
               << experiment_name << ", "

@@ -1,2 +1,2 @@
 QRValue[] qr_values
-NodeConfiguration[] system_possible_configurations
+Configuration[] system_possible_configurations

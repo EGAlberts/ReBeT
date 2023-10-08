@@ -2,29 +2,31 @@
   ros__parameters:
     pic_rate: 3
     goal_obj: "fire hydrant"
-    det_threshold: 56
+    det_threshold: 21
 
 /slam_action_server:
   ros__parameters:
     number_of_loops: 3
     
-/bandit_action_server:
+/bandit_adaptation_logic:
   ros__parameters:
-    hyperparameters: ["epsilon","1.0", "decay_rate", "1.09"]
+    hyperparameters: "['epsilon','1.0', 'decay_rate', '1.09']"
+    bandit_name: "egreedy"
 
 /arborist_node:
   ros__parameters:
     max_objects_per_second: 0.14
     max_pictures_per_second: 0.5
-    mission_qa_window: 16
-    energy_qa_window: 16
-    bt_filename: "onlyIDBandit.xml"
+    task_qa_window: 8
+    power_qa_window: 8
+    bt_filename: "onlyID.xml"
+    experiment_name: "defaultEXP"
  
-/reactive_action_server:
+/reactive_adaptation_logic:
   ros__parameters:
-    energy_high_threshold: 0.4
-    mission_low_threshold: 0.2
+    power_high_threshold: 0.4
+    task_low_threshold: 0.3
     
 /adaptation_manager_node:
   ros__parameters:
-    adaptation_period: 16
+    adaptation_period: 8

@@ -129,37 +129,6 @@ private:
 
 };
 
-class SafetyQR : public QRNode
-{
-  public: 
-    SafetyQR(const std::string& name, const NodeConfig& config) : QRNode(name, config)
-    {
-      std::cout << "Someone made me (a Safety QR node) \n\n\n\n\n\n" << std::endl;
-    }
-
-    static PortsList providedPorts()
-    {
-      PortsList base_ports = QRNode::providedPorts();
-
-      PortsList child_ports = {};
-
-      child_ports.merge(base_ports);
-
-      return child_ports;
-    }
-
-    virtual void calculate_measure() override
-    {
-      //std::cout << "Here's where I calculate a SafetyQR measure" << std::endl;
-      
-      setOutput(METRIC,0.0);
-
-    }
-
-
-
-};
-
 class TaskEfficiencyQR : public QRNode
 {
   public:
@@ -336,11 +305,16 @@ class PowerQR : public QRNode
 
       int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
       int elapsed_seconds = current_time-_window_start;
+
+      std::cout << "elapsed seconds and window length inside powerQR " << elapsed_seconds << " " << _window_length << std::endl;
+
+
       if(elapsed_seconds >= _window_length)
       {
         float picture_consumption = _pictures_taken_in_window * detection_average_power;
         float total_consumption = _motion_consumption + picture_consumption + _idle_consumption +  _laser_consumption;
 
+        std::cout << total_consumption << " is ttcnsmp " <<  _max_consumption << " is max consumption" << std::endl;
 
         _metric = 1 - (total_consumption/_max_consumption); //1 - because power consumption is a bad thing for the QA
 

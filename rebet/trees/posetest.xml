@@ -1,0 +1,16 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="Untitled">
+  	<Sequence>
+			<filterObstacles service_name="/map_server/map" obstacle_positions="{route_poses}"/>
+			<initialPose topic_name="initialpose"/>
+			<Repeat num_cycles="3">
+				<Sequence>
+					<RetryUntilSuccessful num_attempts="-1">
+						<visitObs poses="{route_poses}" variable_parameters="{vo_var_params}" />
+					</RetryUntilSuccessful>
+					<identifyObject />
+				</Sequence>
+			</Repeat>
+   	</Sequence>
+  </BehaviorTree>
+</root>

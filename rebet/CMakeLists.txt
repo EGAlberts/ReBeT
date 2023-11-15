@@ -16,6 +16,7 @@ find_package(rebet_msgs REQUIRED)
 find_package(darknet_ros_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(nav2_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(slam_toolbox REQUIRED)
 
@@ -25,7 +26,7 @@ include_directories(include)
 # Create Cpp executable
 add_executable(arborist src/arborist_node.cpp src/system_attribute_value.cpp)
 
-ament_target_dependencies(arborist rclcpp behaviortree_ros2 behaviortree_cpp rebet_msgs geometry_msgs nav_msgs sensor_msgs darknet_ros_msgs slam_toolbox)
+ament_target_dependencies(arborist rclcpp behaviortree_ros2 behaviortree_cpp rebet_msgs geometry_msgs nav_msgs nav2_msgs sensor_msgs darknet_ros_msgs slam_toolbox)
 
 # Install Cpp executables
 install(TARGETS

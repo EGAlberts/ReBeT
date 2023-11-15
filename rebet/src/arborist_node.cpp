@@ -21,12 +21,13 @@
 
 
 
-
 #include "rebet/system_attribute_value.hpp"
 
 #include "rebet/slam_action_node.h"
 #include "rebet/identify_action_node.h"
-
+#include "rebet/gotopose_action_node.h"
+#include "rebet/initial_pose.h"
+#include "rebet/filter_obstacles.h"
 
 #include "rebet/qr_node.h"
 
@@ -94,6 +95,11 @@ public:
 
       registerActionClient<SLAMAction>(factory, "bt_slam_client", "slam", "SLAMfd");
       registerActionClient<IdentifyAction>(factory, "bt_identify_client", "identify", "IDfd");
+      registerActionClient<IdentifyObjectAction>(factory, "bt_identifyobject_client", "identify_object", "identifyObject");
+
+      registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_client", "navigate_to_pose", "visitObs");
+      registerTopicClient<ProvideInitialPose>(factory,"bt_initialpose_pub","initialPose");
+      registerServiceClient<FilterObstacles>(factory,"bt_filtersobs_cli","filterObstacles");
       
       factory.registerNodeType<TaskEfficiencyQR>("TaskEfficiencyQR");
       factory.registerNodeType<PowerQR>("PowerQR");
@@ -141,8 +147,61 @@ public:
         }
       };
 
+      
+
       // Apply the visitor to ALL the nodes of the tree
       tree.applyVisitor(node_visitor);
+
+      geometry_msgs::msg::PoseStamped geo_pose1;
+      geometry_msgs::msg::PoseStamped geo_pose2;
+      geometry_msgs::msg::PoseStamped geo_pose3;
+      geometry_msgs::msg::PoseStamped geo_pose4;
+
+      geo_pose1.pose.position.x = -1.32632;
+      geo_pose1.pose.position.y = -0.435202;
+
+      geo_pose1.pose.orientation.x = 0.0;
+      geo_pose1.pose.orientation.y = 0.0;
+      geo_pose1.pose.orientation.z = 0.008499897646203087;
+      geo_pose1.pose.orientation.w = 0.9999638752175021;
+
+
+
+
+      geo_pose2.pose.position.x = -0.449529;
+      geo_pose2.pose.position.y = -0.392679;
+
+      geo_pose2.pose.orientation.x = 0.0;
+      geo_pose2.pose.orientation.y = 0.0;
+      geo_pose2.pose.orientation.z = 0.024227866166109918;
+      geo_pose2.pose.orientation.w = 0.9997064621682892;
+
+
+      geo_pose3.pose.position.x = 0.304105;
+      geo_pose3.pose.position.y = -0.426419;
+
+      geo_pose3.pose.orientation.x = 0.0;
+      geo_pose3.pose.orientation.y = 0.0;
+      geo_pose3.pose.orientation.z = -0.022368067917983576;
+      geo_pose3.pose.orientation.w = 0.9997498034696564;
+
+
+      geo_pose4.pose.position.x = 1.13164;
+      geo_pose4.pose.position.y = -0.297064;
+
+      geo_pose4.pose.orientation.x = 0.0;
+      geo_pose4.pose.orientation.y = 0.0;
+      geo_pose4.pose.orientation.z = 0.07745178175718817;
+      geo_pose4.pose.orientation.w = 0.9969960990408322;
+      
+      
+      geo_pose1.header.frame_id = "map";
+      geo_pose2.header.frame_id = "map";
+      geo_pose3.header.frame_id = "map";
+      geo_pose4.header.frame_id = "map";
+
+      // std::vector<geometry_msgs::msg::PoseStamped> route_poses = {geo_pose1, geo_pose2, geo_pose3, geo_pose4};
+      // tree.rootBlackboard()->set<std::vector<geometry_msgs::msg::PoseStamped>>("route_poses", route_poses);
 
   }
 
@@ -158,6 +217,29 @@ public:
     params.nh = nh;
     params.default_port_value = action_name;
     params.server_timeout = std::chrono::milliseconds(4000); //This resolves a race condition with the ServerGoalTimeout (Error 1 in RosActionNode) I suppose caused by the size of the system.
+    factory.registerNodeType<T>(name_in_xml, params);
+
+  }
+
+  template <class T>
+  void registerTopicClient(BehaviorTreeFactory& factory, std::string publisher_name, std::string name_in_xml)
+  {
+    auto options = rclcpp::NodeOptions().use_global_arguments(false); //https://answers.ros.org/question/316870/ros2-composition-and-node-names-with-launch-files/?answer=316925#post-id-316925
+    auto nh = std::make_shared<rclcpp::Node>(publisher_name, options);
+
+    RosNodeParams params;
+    params.nh = nh;
+    factory.registerNodeType<T>(name_in_xml, params);
+  }
+
+  template <class T>
+  void registerServiceClient(BehaviorTreeFactory& factory, std::string service_name, std::string name_in_xml)
+  {
+    auto options = rclcpp::NodeOptions().use_global_arguments(false); //https://answers.ros.org/question/316870/ros2-composition-and-node-names-with-launch-files/?answer=316925#post-id-316925
+    auto nh = std::make_shared<rclcpp::Node>(service_name, options);
+
+    RosNodeParams params;
+    params.nh = nh;
     factory.registerNodeType<T>(name_in_xml, params);
 
   }
@@ -415,7 +497,16 @@ private:
         RCLCPP_INFO(this->get_logger(), "Goal canceled: didn't finish BT");
         return;
       }
-      result_of_tick = tree.tickOnce();
+
+      try{
+        result_of_tick = tree.tickOnce();
+      }
+      catch (const std::runtime_error& error)
+      {
+        //If an error is thrown then we just consider the tree to have failed.
+        result_of_tick = NodeStatus::FAILURE;
+      }
+
       feedback->node_status = toStr(result_of_tick);
       // Publish feedback
       goal_handle->publish_feedback(feedback);

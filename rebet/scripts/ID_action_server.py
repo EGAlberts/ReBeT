@@ -257,12 +257,23 @@ class IdentifyActionServer(Node):
 
         map_rows = [self.map.data[x:x+self.map.info.width] for x in range(0, len(self.map.data), self.map.info.width)]
 
+  
+
         #ASSERT len(chunks) == height
 
         map_as_array = np.array(map_rows)
         # Crucially the notion of 0,0 are upside down, 
         map_as_array = np.flipud(map_as_array)
         #So I make it so indexing matches up and down of robot.
+
+
+        map_string = ""
+        for row in map_as_array:
+            for cell in row:
+                map_string += str(cell) + " "
+            map_string+= "\n"
+        
+        self.get_logger().info(map_string)
 
         # for row in map_as_array:
         #     self.get_logger().info(str(row))
@@ -276,18 +287,27 @@ class IdentifyActionServer(Node):
         # the matrix' 0,0 is the top left while the 0,0 (x,y) for the robot and map is bottom left.
         #
 
+        obs_string = ""
+        for obstacle in obstacles:
+            obs_string+= "obstacle: \n"
+            for points in obstacle:
+                obs_string += ("x: " + str(points[0]) + " y: " + str(points[1]) + "\n")
 
+        self.get_logger().info(obs_string)
 
         origin_x, origin_y = [self.map.info.origin.position.x, self.map.info.origin.position.y]
         for obstacle in obstacles: #convert from cells (grid representation) to actual meters
             for pt in obstacle:
-                #self.get_logger().info('origin x : {1} resolution: {0} pt[0]: {2} '.format(origin_x, self.map.info.resolution, pt[0]))
-                #self.get_logger().info('origin y : {1} resolution: {0} pt[1]: {2} '.format(origin_y, self.map.info.resolution, pt[1]))
+             
                 
                 #0 is the rows, 1 is the columns, which is reverse of x,y
+
+
+                self.get_logger().info('origin x : {0} resolution: {1} pt[1]: {2} '.format(origin_x, self.map.info.resolution, pt[1]))
+                self.get_logger().info('origin y : {0} resolution: {1} pt[0]: {2} '.format(origin_y, self.map.info.resolution, pt[0]))
+
                 pt[1] = origin_x + ( (pt[1]*self.map.info.resolution) + (self.map.info.resolution/2))
                 pt[0] = origin_y + ( (pt[0]*self.map.info.resolution) + (self.map.info.resolution/2))
-
                 # self.get_logger().info('pt[0]: {0} pt[1]: {1}  resolution {2}'.format(pt[0], pt[1], self.map.info.resolution))
 
         points_to_visit = []

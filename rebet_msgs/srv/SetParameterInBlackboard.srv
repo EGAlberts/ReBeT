@@ -1,0 +1,3 @@
+rcl_interfaces/Parameter ros_parameter
+---
+bool success

@@ -179,7 +179,7 @@ class BanditAdaptationLogic(AdaptationLogic):
             bandit_args["arms"] = list(self.configuration_dict.keys())
             bandit_args["initial_configuration"] = bandit_args["arms"][0]
             self.bandit_instance = init_bandit(name=self.bandit_name, **self.hyper_param_kwargs)
-            self.get_logger().info("epsi " + str(self.bandit_instance.epsilon))
+            # self.get_logger().info("epsi " + str(self.bandit_instance.epsilon))
 
             self.bandit_not_initialized = False
 
@@ -216,9 +216,9 @@ class BanditAdaptationLogic(AdaptationLogic):
         
         self.set_parameters_of_node(self.configuration_dict[next_arm])
            
-    def adaptation_state_callback(self, msg):
+    def adaptation_state_callback(self, request, response):
         self.get_logger().info("bndt listener called")
-        
+        msg = request.current_state
         if(msg is not None):
             self.reward = 0 
             #for qr in msg.qr_values: self.reward+=qr.qr_fulfilment 
@@ -257,6 +257,9 @@ class BanditAdaptationLogic(AdaptationLogic):
                 
                 self.first_msg_received = True
             self.do_bandit()
+        
+        response.success = True
+        return response
 
 
     def make_hashable(self):

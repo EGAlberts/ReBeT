@@ -12,6 +12,7 @@
 
 #include "rebet_msgs/srv/set_blackboard.hpp"
 #include "rebet_msgs/srv/set_attribute_in_blackboard.hpp"
+#include "rebet_msgs/srv/set_parameter_in_blackboard.hpp"
 #include "rebet_msgs/srv/get_blackboard.hpp"
 #include "rebet_msgs/srv/get_qr.hpp"
 #include "rebet_msgs/srv/get_variable_params.hpp"
@@ -25,11 +26,16 @@
 
 #include "rebet/slam_action_node.h"
 #include "rebet/identify_action_node.h"
+#include "rebet/identifyobject_action_node.h"
 #include "rebet/gotopose_action_node.h"
 #include "rebet/initial_pose.h"
 #include "rebet/filter_obstacles.h"
+#include "rebet/camera_feed_node.h"
+
 
 #include "rebet/qr_node.h"
+#include "rebet/adapt_node.h"
+
 
 #include <fstream>
 #include <iostream>
@@ -46,6 +52,7 @@ class Arborist : public rclcpp::Node
 public:
   using SystemAttributeValueMsg = rebet_msgs::msg::SystemAttributeValue;
   using SetAttributeInBlackboard = rebet_msgs::srv::SetAttributeInBlackboard;
+  using SetParameterInBlackboard = rebet_msgs::srv::SetParameterInBlackboard;
   using SetBlackboard = rebet_msgs::srv::SetBlackboard;
   using GetBlackboard = rebet_msgs::srv::GetBlackboard;
   using GetQR = rebet_msgs::srv::GetQR;
@@ -71,7 +78,7 @@ public:
   
   Arborist(std::string name = "arborist_node") : Node(name)
   { 
-
+      _set_param_in_blackboard = this->create_service<SetParameterInBlackboard>("set_parameter_in_blackboard", std::bind(&Arborist::handle_set_param_bb, this, _1, _2));
       _set_att_in_blackboard = this->create_service<SetAttributeInBlackboard>("set_attribute_in_blackboard", std::bind(&Arborist::handle_set_atb_bb, this, _1, _2));
       _set_blackboard = this->create_service<SetBlackboard>("set_blackboard", std::bind(&Arborist::handle_set_bb, this, _1, _2));
       _get_blackboard = this->create_service<GetBlackboard>("get_blackboard", std::bind(&Arborist::handle_get_bb, this, _1, _2));
@@ -95,19 +102,22 @@ public:
 
       registerActionClient<SLAMAction>(factory, "bt_slam_client", "slam", "SLAMfd");
       registerActionClient<IdentifyAction>(factory, "bt_identify_client", "identify", "IDfd");
-      registerActionClient<IdentifyObjectAction>(factory, "bt_identifyobject_client", "identify_object", "identifyObject");
+      registerActionClient<IdentifyObjectAction>(factory, "bt_identifyobject_client", "checkForObjectsActionName", "identifyObject");
 
       registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_client", "navigate_to_pose", "visitObs");
       registerTopicClient<ProvideInitialPose>(factory,"bt_initialpose_pub","initialPose");
+      registerTopicClient<CameraFeedNode>(factory,"bt_camera_sub","CameraFeed");
       registerServiceClient<FilterObstacles>(factory,"bt_filtersobs_cli","filterObstacles");
       
       factory.registerNodeType<TaskEfficiencyQR>("TaskEfficiencyQR");
       factory.registerNodeType<PowerQR>("PowerQR");
+      factory.registerNodeType<AdaptPictureRate>("AdaptPictureRate");
 
 
 
 
-      this->declare_parameter(BT_NAME_PARAM, "onlyID.xml");
+
+      this->declare_parameter(BT_NAME_PARAM, "posetest.xml");
       this->declare_parameter(EXP_NAME_PARAM, "no_experiment_name");
 
       bt_name = this->get_parameter(BT_NAME_PARAM).as_string();
@@ -243,6 +253,7 @@ public:
     factory.registerNodeType<T>(name_in_xml, params);
 
   }
+  
 
 private:
 
@@ -288,10 +299,76 @@ private:
     tree.rootBlackboard()->set<rebet::SystemAttributeValue>(sys_attr.name, sys_attvalue_obj);
     
     response->success = true;
-
-
-    //Call template func here
   }
+
+  template <class T>
+  void set_param_in_bb(const std::string name, const rclcpp::ParameterValue value)
+  {
+    if constexpr (std::is_same_v<T, std::vector<int>>) {
+        // Convert from int64_t to int if necessary
+        const std::vector<int64_t>& originalValue = value.get<std::vector<int64_t>>();
+        std::vector<int> convertedValue(originalValue.begin(), originalValue.end());
+        tree.rootBlackboard()->set<std::vector<int>>(name, convertedValue);
+    }
+    else
+    {
+      tree.rootBlackboard()->set<T>(name, value.get<T>());
+    }
+  }
+
+  void handle_set_param_bb(const std::shared_ptr<SetParameterInBlackboard::Request> request,
+        std::shared_ptr<SetParameterInBlackboard::Response> response)
+  {
+    RCLCPP_INFO(this->get_logger(), "Set Parameter Service Called in Arborist Node");
+
+    auto ros_parameter = request->ros_parameter;
+
+    auto ros_param_value_obj = rclcpp::ParameterValue(ros_parameter.value);
+
+    switch(ros_param_value_obj.get_type())
+    {
+      case rclcpp::ParameterType::PARAMETER_NOT_SET:
+        response->success = false;
+        throw std::runtime_error("Parameter meant for blackboard did not have value set");
+        break;
+
+      case rclcpp::ParameterType::PARAMETER_BOOL:
+        set_param_in_bb<bool>(ros_parameter.name, ros_param_value_obj);
+        break;
+      case rclcpp::ParameterType::PARAMETER_INTEGER:
+        set_param_in_bb<int>(ros_parameter.name, ros_param_value_obj);
+        break;
+      case rclcpp::ParameterType::PARAMETER_DOUBLE:
+        set_param_in_bb<double>(ros_parameter.name, ros_param_value_obj);
+        break;      
+      case rclcpp::ParameterType::PARAMETER_STRING:
+        set_param_in_bb<std::string>(ros_parameter.name, ros_param_value_obj);
+        break;      
+      case rclcpp::ParameterType::PARAMETER_BYTE_ARRAY:
+        set_param_in_bb<std::vector<uint8_t>>(ros_parameter.name, ros_param_value_obj);
+        break;      
+      case rclcpp::ParameterType::PARAMETER_BOOL_ARRAY:
+        set_param_in_bb<std::vector<bool>>(ros_parameter.name, ros_param_value_obj);
+        break;      
+      case rclcpp::ParameterType::PARAMETER_INTEGER_ARRAY:
+        set_param_in_bb<std::vector<int>>(ros_parameter.name, ros_param_value_obj);
+        break;      
+      case rclcpp::ParameterType::PARAMETER_DOUBLE_ARRAY:
+        set_param_in_bb<std::vector<double>>(ros_parameter.name, ros_param_value_obj);
+        break;      
+      case rclcpp::ParameterType::PARAMETER_STRING_ARRAY:
+        set_param_in_bb<std::vector<std::string>>(ros_parameter.name, ros_param_value_obj);
+        break;
+    }
+
+    response->success = true;
+  }
+
+
+
+
+
+
   void handle_set_bb(const std::shared_ptr<SetBlackboard::Request> request,
         std::shared_ptr<SetBlackboard::Response> response)
   {
@@ -320,24 +397,39 @@ private:
 
   std::vector<QRNode*> get_tree_qrs()
   {    
+    std::cout << "2 Service to get a qr nodes from the blackboard" << std::endl;
+
     std::vector<QRNode*> qr_nodes;
 
     for (auto const & sbtree : tree.subtrees) 
     {
       for (auto & node : sbtree->nodes) 
       {
+        std::cout << "Node is ?" << node->name() << node->status() << std::endl;
+
         if(auto qr_node = dynamic_cast<QRNode*>(static_cast<TreeNode*>(node.get())))
         {
+          std::cout << "QR node" << std::endl;
+
           qr_nodes.push_back(qr_node);
+        }
+        else{
+          std::cout << "Not QR" << std::endl;
+
+
         }
       }
     }
     return qr_nodes;
+    std::cout << "2 End Service to get a qr nodes from the blackboard " << qr_nodes.size() << std::endl;
+
   }
 
   std::vector<TreeNode::Ptr> get_tree_variable_acs()
   {    
-    std::vector<TreeNode::Ptr> variable_action_nodes;
+    std::cout << "2 Service to get a variable nodes from the blackboard" << std::endl;
+
+    std::vector<TreeNode::Ptr> variable_decorator_nodes;
 
     for (auto const & sbtree : tree.subtrees) 
     {
@@ -345,9 +437,9 @@ private:
       {
         auto node_config = node->config();
 
-        if(node->type() == NodeType::ACTION && (node_config.output_ports.find(VariableActionNodeBase::VARIABLE_PARAMS) != node_config.output_ports.end()))
+        if(node->type() == NodeType::DECORATOR && (node_config.output_ports.find(AdaptNode::VARIABLE_PARAMS) != node_config.output_ports.end()))
         {
-          variable_action_nodes.push_back(node);
+          variable_decorator_nodes.push_back(node);
         }
         // if(auto var_ac_node = dynamic_cast<ActionNodeBase*>(static_cast<TreeNode*>(node.get())))
         // {
@@ -355,12 +447,16 @@ private:
         // }
       }
     }
-    return variable_action_nodes;
+    std::cout << "2 End Service to get a variable nodes from the blackboard " << variable_decorator_nodes.size() << std::endl;
+
+    return variable_decorator_nodes;
   }
   
   void handle_get_qr(const std::shared_ptr<GetQR::Request> request,
         std::shared_ptr<GetQR::Response> response)
   {
+    std::cout << "Service to get a QR nodes from the blackboard" << std::endl;
+
     auto qr_nodes = get_tree_qrs();
     for (auto & node : qr_nodes) 
     {
@@ -390,11 +486,14 @@ private:
       response->qrs_in_tree.push_back(qr_msg);
       }
     }
+    std::cout << "End service to get a QR nodes from the blackboard " << response->qrs_in_tree.size() << std::endl;
+
   }
 
   void handle_get_var_params(const std::shared_ptr<GetVParams::Request> request,
         std::shared_ptr<GetVParams::Response> response)
   {
+    std::cout << "1 Service to get a variable nodes from the blackboard" << std::endl;
   
     auto var_nodes = get_tree_variable_acs();
     for (auto & node : var_nodes) 
@@ -423,6 +522,8 @@ private:
       }
       }
     }
+      std::cout << "1 End Service to get a variable nodes from the blackboard " << response->variables_in_tree.variable_parameters.size() << std::endl;
+
   }
   
 
@@ -504,6 +605,10 @@ private:
       catch (const std::runtime_error& error)
       {
         //If an error is thrown then we just consider the tree to have failed.
+        
+        RCLCPP_INFO(this->get_logger(), "Tree failed because of runtime error.");
+        RCLCPP_ERROR(this->get_logger(), error.what());
+
         result_of_tick = NodeStatus::FAILURE;
       }
 
@@ -527,52 +632,52 @@ private:
           goal_handle->succeed(result);
           RCLCPP_INFO(this->get_logger(), "Goal finished: Done ticking the tree");
           
-          //Reporting on mission
-          float id_time_elapsed = tree.rootBlackboard()->get<float>("id_time_elapsed");
-          int32_t id_picture_rate = tree.rootBlackboard()->get<int32_t>("id_picture_rate");
-          float avg_task_metric = tree.rootBlackboard()->get<float>("task_mean_metric");
-          float avg_power_metric = tree.rootBlackboard()->get<float>("power_mean_metric");
+          // //Reporting on mission
+          // float id_time_elapsed = tree.rootBlackboard()->get<float>("id_time_elapsed");
+          // int32_t id_picture_rate = tree.rootBlackboard()->get<int32_t>("id_picture_rate");
+          // float avg_task_metric = tree.rootBlackboard()->get<float>("task_mean_metric");
+          // float avg_power_metric = tree.rootBlackboard()->get<float>("power_mean_metric");
 
-          int32_t id_det_threshold = tree.rootBlackboard()->get<int32_t>("id_det_threshold");
-          auto average_utility = tree.rootBlackboard()->get<std::string>("average_utility");
+          // int32_t id_det_threshold = tree.rootBlackboard()->get<int32_t>("id_det_threshold");
+          // auto average_utility = tree.rootBlackboard()->get<std::string>("average_utility");
 
 
           
-          auto curr_time_pointer = std::chrono::system_clock::now();
-          int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
+          // auto curr_time_pointer = std::chrono::system_clock::now();
+          // int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
 
-          // file pointer
-          std::fstream fout;
+          // // file pointer
+          // std::fstream fout;
         
-          // opens an existing csv file or creates a new file.
-          fout.open("rebet_results.csv", std::ios::out | std::ios::app);
+          // // opens an existing csv file or creates a new file.
+          // fout.open("rebet_results.csv", std::ios::out | std::ios::app);
         
-          //Header
-          // fout << "timestamp" << ", " 
-          //     << "picture_rate" << ", "
-          //     << "time_elapsed" << "\n";
+          // //Header
+          // // fout << "timestamp" << ", " 
+          // //     << "picture_rate" << ", "
+          // //     << "time_elapsed" << "\n";
 
-          // Insert the data to file
-          fout << current_time << ", " 
-              << id_picture_rate << ", "
-              << avg_task_metric << ", "
-              << avg_power_metric << ", "
-              << id_time_elapsed << ", "
-              << id_det_threshold << ", "
-              << experiment_name << ", "
-              << bt_name << ", "
-              << average_utility << "\n";
+          // // Insert the data to file
+          // fout << current_time << ", " 
+          //     << id_picture_rate << ", "
+          //     << avg_task_metric << ", "
+          //     << avg_power_metric << ", "
+          //     << id_time_elapsed << ", "
+          //     << id_det_threshold << ", "
+          //     << experiment_name << ", "
+          //     << bt_name << ", "
+          //     << average_utility << "\n";
 
             
-          fout.close();
+          // fout.close();
 
 
 
-          std::ofstream outfile ("mission.done");
+          // std::ofstream outfile ("mission.done");
 
-          outfile << "." << std::endl;
+          // outfile << "." << std::endl;
 
-          outfile.close();
+          // outfile.close();
 
           break;
         }
@@ -615,6 +720,8 @@ private:
   rclcpp::Service<GetVParams>::SharedPtr _get_var_param;
   rclcpp::Service<SetWeights>::SharedPtr _set_weights;
   rclcpp::Service<SetAttributeInBlackboard>::SharedPtr _set_att_in_blackboard;
+  rclcpp::Service<SetParameterInBlackboard>::SharedPtr _set_param_in_blackboard;
+
 
 
   rclcpp_action::Server<BTAction>::SharedPtr _start_tree; 

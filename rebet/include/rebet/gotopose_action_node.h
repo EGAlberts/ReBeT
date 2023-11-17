@@ -107,6 +107,8 @@ public:
 
     RCLCPP_INFO(node_->get_logger(), ss.str().c_str());
     num_executions++;
+    RCLCPP_INFO(node_->get_logger(), "SUCCESS IN RESULT RCV GOTOPOSE");
+
     return NodeStatus::SUCCESS;
   }
 
@@ -138,17 +140,18 @@ public:
     // int16 number_of_recoveries
     // float32 distance_remaining
 
-    std::string some_text;
-    std::stringstream ss;
-    ss << "NavigateToPose Feedback received, time left: ";
-    // for (auto number : feedback->left_time) {
-    ss << feedback->estimated_time_remaining.sec;
-    // }
-    RCLCPP_INFO(node_->get_logger(), ss.str().c_str());
+    // std::string some_text;
+    // std::stringstream ss;
+    // ss << "NavigateToPose Feedback received, time left: ";
+    // // for (auto number : feedback->left_time) {
+    // ss << feedback->estimated_time_remaining.sec;
+    // // }
+    // RCLCPP_INFO(node_->get_logger(), ss.str().c_str());
 
     
     // setOutput("objs_identified", feedback->obj_idd); 
     // setOutput(PC_RATE, feedback->picture_rate); 
+    // RCLCPP_INFO(node_->get_logger(), "RUNNING IN VISIT OB FDBK");
 
     return NodeStatus::RUNNING;
   }

@@ -26,7 +26,7 @@ DET_THRESH_PARAM = "det_threshold"
 class IdentifyObjectActionServer(Node):
 
     def __init__(self):
-        super().__init__('identify_action_server')
+        super().__init__('identifyobject_action_server')
         self._action_server = ActionServer(
             self,
             IdentifyObject,
@@ -48,7 +48,7 @@ class IdentifyObjectActionServer(Node):
 
         self.counter = 0
         self.prev_done = True
-        self.ID_fdback_msg = Identify.Feedback()
+        self.ID_fdback_msg = IdentifyObject.Feedback()
         self.ID_fdback_msg.obj_idd.object_names = []
         self.ID_fdback_msg.obj_idd.probabilities = []
         self.ID_fdback_msg.obj_idd.object_detected = False
@@ -95,7 +95,7 @@ class IdentifyObjectActionServer(Node):
             
 
         goal_handle.succeed()
-        res = Identify.Result()
+        res = IdentifyObject.Result()
         res.time_elapsed = time.time() - self.initial_time
         res.picture_rate = self.picture_rate
         return res

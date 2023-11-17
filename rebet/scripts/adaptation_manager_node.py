@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from rebet_msgs.srv import GetQR, GetVariableParams, SetBlackboard
+from rebet_msgs.srv import GetQR, GetVariableParams, SetBlackboard, AdaptSystem, RequestAdaptation
 from rcl_interfaces.msg import Parameter
 from std_msgs.msg import Float64
 from rebet_msgs.msg import AdaptationState, Configuration, QRValue
@@ -18,7 +18,7 @@ ADAP_PERIOD_PARAM = "adaptation_period"
 
 class AdaptationManager(Node):
 
-    def __init__(self):
+    def __init__(self): 
         super().__init__('adaptation_manager')
         self.publisher_ = self.create_publisher(AdaptationState, 'system_adaptation_state', 10)
      
@@ -27,8 +27,9 @@ class AdaptationManager(Node):
         self.declare_parameter(ADAP_PERIOD_PARAM, 8)
         self.adaptation_period = self.get_parameter(ADAP_PERIOD_PARAM).get_parameter_value().integer_value
 
-        self.timer = self.create_timer(self.adaptation_period, self.timer_callback)
-        
+        # self.timer = self.create_timer(self.adaptation_period, self.timer_callback)
+        self.srv_adapt = self.create_service(RequestAdaptation, '/request_adaptation',self.request_adaptation)
+        self.cli_adapt = self.create_client(AdaptSystem, '/adapt_system', callback_group=exclusive_group)
         self.cli_qr = self.create_client(GetQR, '/get_qr', callback_group=exclusive_group)
         self.cli_var = self.create_client(GetVariableParams, '/get_variable_params', callback_group=exclusive_group)
 
@@ -111,22 +112,15 @@ class AdaptationManager(Node):
         self.req_sbb.script_code = "average_utility:='"
         return all_the_qrs
     
-    def get_system_vars(self):
+    def make_configurations(self, variable_parameters_obj):
         param_to_node = {}
-        self.get_logger().info("Calling VariableParams service client...")
-        
-        while not self.cli_var.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service not available, waiting again...')
-        
-        response = self.cli_var.call(self.req_var)
 
-        self.get_logger().info('get vars Result of it ' + str(response.variables_in_tree))
-
+        
         possible_configurations = []
 
         possible_configurations = []
         list_of_list_param = []
-        for knob in response.variables_in_tree.variable_parameters:
+        for knob in variable_parameters_obj.variable_parameters:
             decomposed = []
             #knob is a msg of type VariableParameter is name-potential_values pair representing a thing that can change about the current state of the system.
             for pos_val in knob.possible_values:
@@ -169,6 +163,48 @@ class AdaptationManager(Node):
         self.publisher_.publish(msg)
         self.get_logger().info('\n\n\nPublishing: "%s"\n\n\n\n\n' % msg)
         self.i += 1
+
+    def request_adaptation(self, request, response):
+        self.get_logger().info('\n\n\hi:\n\n\n\n\n')
+
+        req = AdaptSystem.Request()
+        response.success = False
+        msg = AdaptationState()
+        self.get_logger().info('\n\n pre sys util \n\n')
+
+        msg.qr_values = self.get_system_utility()
+        self.get_logger().info('\n\n sys util \n\n')
+
+        self.get_logger().info('\n\n pre sys var \n\n')
+
+        msg.system_possible_configurations = self.make_configurations(request.adaptation_options)
+
+        self.get_logger().info(str(msg.system_possible_configurations))
+        
+        self.get_logger().info('\n\n sys var \n\n')
+
+        self.get_logger().info('\n\n 2 \n\n')
+        
+        # all_the_qrs = []
+
+        # for i in range(5):
+        #     qr_val = QRValue()
+        #     qr_val.name = "test"
+        #     qr_val.qr_fulfilment = 5.0
+        #     all_the_qrs.append(qr_val)
+
+        # msg.qr_values = all_the_qrs
+        
+        req.current_state = msg
+        adapt_response = self.cli_adapt.call(req)
+        self.get_logger().info('\n\n 3 \n\n')
+
+        # if(adapt_response): response.success = True
+        self.get_logger().info('\n\n bye \n\n\n\n\n')
+        response.success = True
+        
+        return response
+
 
     
 

@@ -88,8 +88,9 @@ class ReactiveActionServer(Node):
             self.increase_picture_rate()
 
     
-    def adaptation_state_callback(self, msg):
+    def adaptation_state_callback(self, request, response):
         #self.get_logger().info('I heard: "%s"' % msg.data)
+        msg = request.current_state
         if(msg is not None):
             self.possible_configs = msg.system_possible_configurations
             for qr in msg.qr_values:
@@ -104,6 +105,8 @@ class ReactiveActionServer(Node):
                 self.first_msg_received = True
 
             self.execute_logic()
+        response.success = True
+        return response
 
 
 

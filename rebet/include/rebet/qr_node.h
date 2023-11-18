@@ -306,7 +306,7 @@ class PowerQR : public QRNode
       int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
       int elapsed_seconds = current_time-_window_start;
 
-      std::cout << "elapsed seconds and window length inside powerQR " << elapsed_seconds << " " << _window_length << std::endl;
+      //std::cout << "elapsed seconds and window length inside powerQR " << elapsed_seconds << " " << _window_length << std::endl;
 
 
       if(elapsed_seconds >= _window_length)
@@ -314,7 +314,7 @@ class PowerQR : public QRNode
         float picture_consumption = _pictures_taken_in_window * detection_average_power;
         float total_consumption = _motion_consumption + picture_consumption + _idle_consumption +  _laser_consumption;
 
-        std::cout << total_consumption << " is ttcnsmp " <<  _max_consumption << " is max consumption" << std::endl;
+        //std::cout << total_consumption << " is ttcnsmp " <<  _max_consumption << " is max consumption" << std::endl;
 
         _metric = 1 - (total_consumption/_max_consumption); //1 - because power consumption is a bad thing for the QA
 

@@ -50,7 +50,7 @@ public:
     RCLCPP_INFO(node_->get_logger(), "name of the node");
     RCLCPP_INFO(node_->get_logger(), node_->get_name());
 
-    goal_object = "fire_hydrant"; //Parameterize
+    goal_object = "fire hydrant"; //Parameterize
     times_detected = 0;
     // _var_params.server_name = ACTION_SRVR;
 

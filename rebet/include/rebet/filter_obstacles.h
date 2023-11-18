@@ -79,6 +79,8 @@ class FilterObstacles : public RosServiceNode<nav_msgs::srv::GetMap>
 {
 public:
     static constexpr const char* OBS_POS = "obstacle_positions";
+    static constexpr const char* OBS_NUM = "obstacle_number";
+
     FilterObstacles(const std::string & instance_name,
                           const BT::NodeConfig& conf,
                           const BT::RosNodeParams& params) :
@@ -93,6 +95,7 @@ public:
 
     PortsList child_ports = { 
                 OutputPort<std::vector<PoseStamped>>(OBS_POS),
+                OutputPort<int>(OBS_NUM)
             };
 
     child_ports.merge(base_ports);
@@ -270,6 +273,8 @@ public:
         }
 
         setOutput(OBS_POS, reordered_visiting);
+        setOutput(OBS_NUM, (int)reordered_visiting.size());
+
 
         return BT::NodeStatus::SUCCESS;
     }

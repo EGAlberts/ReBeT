@@ -162,57 +162,6 @@ public:
       // Apply the visitor to ALL the nodes of the tree
       tree.applyVisitor(node_visitor);
 
-      geometry_msgs::msg::PoseStamped geo_pose1;
-      geometry_msgs::msg::PoseStamped geo_pose2;
-      geometry_msgs::msg::PoseStamped geo_pose3;
-      geometry_msgs::msg::PoseStamped geo_pose4;
-
-      geo_pose1.pose.position.x = -1.32632;
-      geo_pose1.pose.position.y = -0.435202;
-
-      geo_pose1.pose.orientation.x = 0.0;
-      geo_pose1.pose.orientation.y = 0.0;
-      geo_pose1.pose.orientation.z = 0.008499897646203087;
-      geo_pose1.pose.orientation.w = 0.9999638752175021;
-
-
-
-
-      geo_pose2.pose.position.x = -0.449529;
-      geo_pose2.pose.position.y = -0.392679;
-
-      geo_pose2.pose.orientation.x = 0.0;
-      geo_pose2.pose.orientation.y = 0.0;
-      geo_pose2.pose.orientation.z = 0.024227866166109918;
-      geo_pose2.pose.orientation.w = 0.9997064621682892;
-
-
-      geo_pose3.pose.position.x = 0.304105;
-      geo_pose3.pose.position.y = -0.426419;
-
-      geo_pose3.pose.orientation.x = 0.0;
-      geo_pose3.pose.orientation.y = 0.0;
-      geo_pose3.pose.orientation.z = -0.022368067917983576;
-      geo_pose3.pose.orientation.w = 0.9997498034696564;
-
-
-      geo_pose4.pose.position.x = 1.13164;
-      geo_pose4.pose.position.y = -0.297064;
-
-      geo_pose4.pose.orientation.x = 0.0;
-      geo_pose4.pose.orientation.y = 0.0;
-      geo_pose4.pose.orientation.z = 0.07745178175718817;
-      geo_pose4.pose.orientation.w = 0.9969960990408322;
-      
-      
-      geo_pose1.header.frame_id = "map";
-      geo_pose2.header.frame_id = "map";
-      geo_pose3.header.frame_id = "map";
-      geo_pose4.header.frame_id = "map";
-
-      // std::vector<geometry_msgs::msg::PoseStamped> route_poses = {geo_pose1, geo_pose2, geo_pose3, geo_pose4};
-      // tree.rootBlackboard()->set<std::vector<geometry_msgs::msg::PoseStamped>>("route_poses", route_poses);
-
   }
 
   template <class T>
@@ -321,46 +270,46 @@ private:
   {
     RCLCPP_INFO(this->get_logger(), "Set Parameter Service Called in Arborist Node");
 
-    auto ros_parameter = request->ros_parameter;
-
-    auto ros_param_value_obj = rclcpp::ParameterValue(ros_parameter.value);
-
-    switch(ros_param_value_obj.get_type())
+    for (auto const & ros_parameter : request->ros_parameters)
     {
-      case rclcpp::ParameterType::PARAMETER_NOT_SET:
-        response->success = false;
-        throw std::runtime_error("Parameter meant for blackboard did not have value set");
-        break;
+      auto ros_param_value_obj = rclcpp::ParameterValue(ros_parameter.value);
 
-      case rclcpp::ParameterType::PARAMETER_BOOL:
-        set_param_in_bb<bool>(ros_parameter.name, ros_param_value_obj);
-        break;
-      case rclcpp::ParameterType::PARAMETER_INTEGER:
-        set_param_in_bb<int>(ros_parameter.name, ros_param_value_obj);
-        break;
-      case rclcpp::ParameterType::PARAMETER_DOUBLE:
-        set_param_in_bb<double>(ros_parameter.name, ros_param_value_obj);
-        break;      
-      case rclcpp::ParameterType::PARAMETER_STRING:
-        set_param_in_bb<std::string>(ros_parameter.name, ros_param_value_obj);
-        break;      
-      case rclcpp::ParameterType::PARAMETER_BYTE_ARRAY:
-        set_param_in_bb<std::vector<uint8_t>>(ros_parameter.name, ros_param_value_obj);
-        break;      
-      case rclcpp::ParameterType::PARAMETER_BOOL_ARRAY:
-        set_param_in_bb<std::vector<bool>>(ros_parameter.name, ros_param_value_obj);
-        break;      
-      case rclcpp::ParameterType::PARAMETER_INTEGER_ARRAY:
-        set_param_in_bb<std::vector<int>>(ros_parameter.name, ros_param_value_obj);
-        break;      
-      case rclcpp::ParameterType::PARAMETER_DOUBLE_ARRAY:
-        set_param_in_bb<std::vector<double>>(ros_parameter.name, ros_param_value_obj);
-        break;      
-      case rclcpp::ParameterType::PARAMETER_STRING_ARRAY:
-        set_param_in_bb<std::vector<std::string>>(ros_parameter.name, ros_param_value_obj);
-        break;
+      switch(ros_param_value_obj.get_type())
+      {
+        case rclcpp::ParameterType::PARAMETER_NOT_SET:
+          response->success = false;
+          throw std::runtime_error("Parameter meant for blackboard did not have value set");
+          break;
+
+        case rclcpp::ParameterType::PARAMETER_BOOL:
+          set_param_in_bb<bool>(ros_parameter.name, ros_param_value_obj);
+          break;
+        case rclcpp::ParameterType::PARAMETER_INTEGER:
+          set_param_in_bb<int>(ros_parameter.name, ros_param_value_obj);
+          break;
+        case rclcpp::ParameterType::PARAMETER_DOUBLE:
+          set_param_in_bb<double>(ros_parameter.name, ros_param_value_obj);
+          break;      
+        case rclcpp::ParameterType::PARAMETER_STRING:
+          set_param_in_bb<std::string>(ros_parameter.name, ros_param_value_obj);
+          break;      
+        case rclcpp::ParameterType::PARAMETER_BYTE_ARRAY:
+          set_param_in_bb<std::vector<uint8_t>>(ros_parameter.name, ros_param_value_obj);
+          break;      
+        case rclcpp::ParameterType::PARAMETER_BOOL_ARRAY:
+          set_param_in_bb<std::vector<bool>>(ros_parameter.name, ros_param_value_obj);
+          break;      
+        case rclcpp::ParameterType::PARAMETER_INTEGER_ARRAY:
+          set_param_in_bb<std::vector<int>>(ros_parameter.name, ros_param_value_obj);
+          break;      
+        case rclcpp::ParameterType::PARAMETER_DOUBLE_ARRAY:
+          set_param_in_bb<std::vector<double>>(ros_parameter.name, ros_param_value_obj);
+          break;      
+        case rclcpp::ParameterType::PARAMETER_STRING_ARRAY:
+          set_param_in_bb<std::vector<std::string>>(ros_parameter.name, ros_param_value_obj);
+          break;
+      }
     }
-
     response->success = true;
   }
 

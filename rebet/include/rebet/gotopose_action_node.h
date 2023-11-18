@@ -80,17 +80,21 @@ public:
     // #goal definition
     // geometry_msgs/PoseStamped pose
     // string behavior_tree
-
-    std::vector<PoseStamped> poses_to_go_to;
+    std::stringstream ss;
+  
 
     goal.behavior_tree = "";
     
-    getInput(POSES,poses_to_go_to);
+    getInput(POSES,poses_to_go_to_);
 
-    goal.pose = poses_to_go_to[num_executions];
+
+    RCLCPP_INFO(node_->get_logger(), ss.str().c_str());
+    
+
+    goal.pose = poses_to_go_to_[num_executions];
     goal.pose.header.stamp = node_->now();
 
- 
+
     // return true, if we were able to set the goal correctly.
     return true;
   }
@@ -106,7 +110,15 @@ public:
     //Unfortunately, NavigateToPose in Nav2 right now provides no actual result indicating you reached the pose or not..
 
     RCLCPP_INFO(node_->get_logger(), ss.str().c_str());
-    num_executions++;
+
+    //If the next num_executions would exceed the size, reset to 0
+    if(num_executions+1 > poses_to_go_to_.size()-1)
+    {
+      num_executions = 0;
+    }
+    else {
+      num_executions++;
+    }
     RCLCPP_INFO(node_->get_logger(), "SUCCESS IN RESULT RCV GOTOPOSE");
 
     return NodeStatus::SUCCESS;
@@ -157,4 +169,5 @@ public:
   }
 private:
   int num_executions = 0;
+  std::vector<PoseStamped> poses_to_go_to_;
 };

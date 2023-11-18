@@ -36,6 +36,8 @@ class AdaptNode : public DecoratorNode
 public:
 
   static constexpr const char* VARIABLE_PARAMS = "variable_parameters";
+  static constexpr const char* ADAP_STRAT = "adaptation_strategy";
+
 
   AdaptNode(const std::string& name, const NodeConfig& config) : DecoratorNode(name, config)
   {
@@ -45,7 +47,9 @@ public:
 
     static PortsList providedPorts()
     {
-        PortsList ports = {OutputPort<VariableParameters>(VARIABLE_PARAMS, "What can be changed at runtime about this action")};
+        PortsList ports = {OutputPort<VariableParameters>(VARIABLE_PARAMS, "What can be changed at runtime about this action"),
+                           InputPort<std::string>(ADAP_STRAT, "Which strategy should be employed to decide on adaptations")
+                          };
         return ports;
     }
 
@@ -162,9 +166,13 @@ class OnStartAdapt : public AdaptNode
       // on_feedback_state_change_ = NodeStatus::RUNNING;
       response_ = {};
 
+      std::string strategy_name;
+      getInput(ADAP_STRAT,strategy_name);
       auto request = std::make_shared<rebet_msgs::srv::RequestAdaptation::Request>();
 
       request->adaptation_options = _var_params;
+      request->task_identifier = registrationName();
+      request->adaptation_strategy = strategy_name;
 
       future_response_ = adapt_client_->async_send_request(request).share();
       time_request_sent_ = node_->now();

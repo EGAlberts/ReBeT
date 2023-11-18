@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 import time
-import rclpy
-from rclpy.action import ActionServer
-from rclpy.node import Node
+
 
 from rebet_msgs.msg import AdaptationState
 from std_msgs.msg import Float64
 
-from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
-from rclpy.executors import MultiThreadedExecutor
-from rcl_interfaces.srv import SetParameters
-from rcl_interfaces.msg import Parameter, ParameterValue
+from rebet.rebet.adaptation_strategies.adaptation_strategy import AdaptationStrategy
 
-class ReactiveActionServer(Node):
+
+class ReactiveActionServer(AdaptationStrategy):
 
     def __init__(self):
         super().__init__('reactive_action_server')

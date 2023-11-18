@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from rebet_msgs.srv import GetQR, GetVariableParams, SetBlackboard, AdaptSystem, RequestAdaptation
+from rebet_msgs.srv import GetQR, GetVariableParams, SetBlackboard, AdaptSystem, RequestAdaptation, SetParameterInBlackboard
 from rcl_interfaces.msg import Parameter
 from std_msgs.msg import Float64
 from rebet_msgs.msg import AdaptationState, Configuration, QRValue
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
+from rebet.adaptation_strategies import create_strategy
 from itertools import product
 import numpy as np
 import sys
@@ -15,24 +16,27 @@ ADAP_PERIOD_PARAM = "adaptation_period"
 
 
 
-
 class AdaptationManager(Node):
 
     def __init__(self): 
         super().__init__('adaptation_manager')
         self.publisher_ = self.create_publisher(AdaptationState, 'system_adaptation_state', 10)
-     
+
+        self.task_to_strategy_map = {}
         self.i = 0
         exclusive_group = MutuallyExclusiveCallbackGroup()
         self.declare_parameter(ADAP_PERIOD_PARAM, 8)
         self.adaptation_period = self.get_parameter(ADAP_PERIOD_PARAM).get_parameter_value().integer_value
 
         # self.timer = self.create_timer(self.adaptation_period, self.timer_callback)
-        self.srv_adapt = self.create_service(RequestAdaptation, '/request_adaptation',self.request_adaptation)
-        self.cli_adapt = self.create_client(AdaptSystem, '/adapt_system', callback_group=exclusive_group)
-        self.cli_qr = self.create_client(GetQR, '/get_qr', callback_group=exclusive_group)
-        self.cli_var = self.create_client(GetVariableParams, '/get_variable_params', callback_group=exclusive_group)
+        self.srv_adapt = self.create_service(RequestAdaptation, '/request_adaptation',self.adaptation_requested)
+        
+        self.cli_exec = self.create_client(SetParameterInBlackboard, '/set_parameter_in_blackboard', callback_group=exclusive_group)
+        self.req_exec = SetParameterInBlackboard.Request()
 
+
+        self.cli_qr = self.create_client(GetQR, '/get_qr', callback_group=exclusive_group)
+        
         self.cli_sbb = self.create_client(SetBlackboard, '/set_blackboard', callback_group=exclusive_group)
 
         self.req_sbb = SetBlackboard.Request()
@@ -148,7 +152,14 @@ class AdaptationManager(Node):
         return config_list
 
 
+    def execute_adaptation(self):
 
+        while not self.cli_exec.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('set param in bb service not available, waiting again...')
+        
+        response = self.cli_exec.call(self.req_exec)    
+
+        return response.success
 
     def timer_callback(self):        
         #I should probably make functions like these into utilities, like as members of a subclass of Node..
@@ -164,26 +175,22 @@ class AdaptationManager(Node):
         self.get_logger().info('\n\n\nPublishing: "%s"\n\n\n\n\n' % msg)
         self.i += 1
 
-    def request_adaptation(self, request, response):
+    def adaptation_requested(self, request, response):
+        task_identifier = str(request.task_identifier)
+        adaptation_strategy = str(request.adaptation_strategy)
         self.get_logger().info('\n\n\hi:\n\n\n\n\n')
 
-        req = AdaptSystem.Request()
         response.success = False
-        msg = AdaptationState()
+        adapt_state = AdaptationState()
         self.get_logger().info('\n\n pre sys util \n\n')
 
-        msg.qr_values = self.get_system_utility()
+        adapt_state.qr_values = self.get_system_utility()
         self.get_logger().info('\n\n sys util \n\n')
 
-        self.get_logger().info('\n\n pre sys var \n\n')
+        adapt_state.system_possible_configurations = self.make_configurations(request.adaptation_options)
 
-        msg.system_possible_configurations = self.make_configurations(request.adaptation_options)
-
-        self.get_logger().info(str(msg.system_possible_configurations))
+        self.get_logger().info(str(adapt_state.system_possible_configurations))
         
-        self.get_logger().info('\n\n sys var \n\n')
-
-        self.get_logger().info('\n\n 2 \n\n')
         
         # all_the_qrs = []
 
@@ -194,14 +201,30 @@ class AdaptationManager(Node):
         #     all_the_qrs.append(qr_val)
 
         # msg.qr_values = all_the_qrs
-        
-        req.current_state = msg
-        adapt_response = self.cli_adapt.call(req)
-        self.get_logger().info('\n\n 3 \n\n')
 
-        # if(adapt_response): response.success = True
-        self.get_logger().info('\n\n bye \n\n\n\n\n')
-        response.success = True
+        #new task or new strategy for the same task.
+
+        condition_one = False
+        condition_two = False
+
+
+        if ( (task_identifier not in self.task_to_strategy_map) or ( (task_identifier in self.task_to_strategy_map) and (adaptation_strategy != self.task_to_strategy_map[task_identifier].get_name()) ) ):
+            self.task_to_strategy_map[task_identifier] = create_strategy(adaptation_strategy)
+        elif(request.adaptation_strategy == "reset"):
+            #reset of same strategy during task.
+            self.get_logger().info('\n\n RESET OF STRATEGY \n\n')
+
+            self.task_to_strategy_map[task_identifier] = create_strategy(self.task_to_strategy_map[task_identifier].get_name())
+        else:
+            self.get_logger().info('\n\n REUSE OF STRATEGY \n\n')
+
+
+
+        
+        self.req_exec.ros_parameters = self.task_to_strategy_map[task_identifier].suggest_adaptation(adapt_state).configuration_parameters
+        is_exec_success = self.execute_adaptation()
+
+        response.success = is_exec_success
         
         return response
 

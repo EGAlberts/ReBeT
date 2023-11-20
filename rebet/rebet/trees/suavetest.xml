@@ -1,0 +1,11 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="Untitled">
+	<Sequence>
+		<ArmMotors/>
+		<GuidedMode/>
+		<AdaptDuring>
+			<SpiralSearch/>
+		</AdaptDuring>
+	</Sequence>
+  </BehaviorTree>
+</root>

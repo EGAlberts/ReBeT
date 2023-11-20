@@ -3,6 +3,7 @@ Re-configuable Behavior Trees
 
 Behavior Trees to meet Quality Requirements through Multi-armed Bandits at runtime in ROS 2.
 
+
 ## Dependencies 
 1. [ROS 2 Humble](https://docs.ros.org/en/humble/Installation.html)
 2. [NAV2](https://navigation.ros.org/getting_started/index.html#installation)

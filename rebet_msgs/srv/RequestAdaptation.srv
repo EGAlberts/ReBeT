@@ -1,5 +1,6 @@
 VariableParameters adaptation_options
 string task_identifier
 string adaptation_strategy
+string adaptation_target
 ---
 bool success

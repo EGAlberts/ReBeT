@@ -35,6 +35,15 @@
 
 #include "rebet/qr_node.h"
 #include "rebet/adapt_node.h"
+#include "rebet/spiral_search.h"
+#include "rebet/arm_motors.h"
+#include "rebet/set_mavros_mode.h"
+#include "rebet/confirm_mavros_status.h"
+
+
+
+
+
 
 
 #include <fstream>
@@ -103,6 +112,15 @@ public:
       registerActionClient<SLAMAction>(factory, "bt_slam_client", "slam", "SLAMfd");
       registerActionClient<IdentifyAction>(factory, "bt_identify_client", "identify", "IDfd");
       registerActionClient<IdentifyObjectAction>(factory, "bt_identifyobject_client", "checkForObjectsActionName", "identifyObject");
+      
+      registerActionClient<SpiralSearch>(factory, "bt_spiral_client", "spiral", "SpiralSearch");
+      
+
+      registerTopicClient<ConfirmMavrosStatus>(factory, "bt_mavros_status_sub", "ConfirmMavrosState");
+      registerServiceClient<SetMavrosMode>(factory,"bt_mavrosmode_cli","SetMavrosMode");
+      registerServiceClient<ArmMotors>(factory,"bt_armmotors_cli","ArmMotors");
+
+
 
       registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_client", "navigate_to_pose", "visitObs");
       registerTopicClient<ProvideInitialPose>(factory,"bt_initialpose_pub","initialPose");
@@ -112,12 +130,13 @@ public:
       factory.registerNodeType<TaskEfficiencyQR>("TaskEfficiencyQR");
       factory.registerNodeType<PowerQR>("PowerQR");
       factory.registerNodeType<AdaptPictureRate>("AdaptPictureRate");
+      factory.registerNodeType<AdaptSpiralAltitude>("AdaptSpiralAltitude");
 
 
 
 
 
-      this->declare_parameter(BT_NAME_PARAM, "posetest.xml");
+      this->declare_parameter(BT_NAME_PARAM, "spiraltest.xml");
       this->declare_parameter(EXP_NAME_PARAM, "no_experiment_name");
 
       bt_name = this->get_parameter(BT_NAME_PARAM).as_string();

@@ -18,7 +18,7 @@ using namespace BT;
 
 
 
-Spiral = suave_msgs::action::Spiral;
+using Spiral = suave_msgs::action::Spiral;
 
 class SpiralSearch : public RosActionNode<Spiral>
 {
@@ -46,7 +46,7 @@ public:
   // using RosActionNode::providedBasicPorts()
   static PortsList providedPorts()
   {
-    PortsList base_ports = VariableActionNode::providedPorts();
+    PortsList base_ports = RosActionNode::providedPorts();
 
     PortsList child_ports = { 
             };
@@ -58,7 +58,7 @@ public:
 
   // This is called when the TreeNode is ticked and it should
   // send the request to the action server
-  bool setGoal(VariableActionNode::Goal& goal) override 
+  bool setGoal(RosActionNode::Goal& goal) override 
   {
     // return true, if we were able to set the goal correctly.
     return true;

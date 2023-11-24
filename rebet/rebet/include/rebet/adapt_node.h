@@ -41,8 +41,6 @@ public:
 
   AdaptNode(const std::string& name, const NodeConfig& config) : DecoratorNode(name, config)
   {
-    _average_metric = 0.0;
-    _times_calculated = 0;
   }
 
     static PortsList providedPorts()
@@ -105,7 +103,7 @@ private:
 
   //void halt() override;
 
-    protected:
+  protected:
 
     template <class T>
     void registerAdaptations(std::vector<T> param_values, std::string param_name, std::string server_name)
@@ -121,9 +119,7 @@ private:
         _var_params.variable_parameters.push_back(variable_param); //vector of VariableParameter   
     }
 
-    int _times_calculated;
-    double _average_metric;
-    double _metric;
+    std::string adaptation_target_;
 
     VariableParameters _var_params = VariableParameters();
 
@@ -132,10 +128,12 @@ private:
 class OnStartAdapt : public AdaptNode
 {
   public:
-    OnStartAdapt(const std::string& name, const NodeConfig& config) : AdaptNode(name, config)
+    OnStartAdapt(const std::string& name, const NodeConfig& config, const std::string& adaptation_target) : AdaptNode(name, config)
     { 
       std::cout << "\n\n\n\nSomeone created me a OnStartAdapt node!!!!\n\n\n\n\n" << std::endl;
       node_ = rclcpp::Node::make_shared("adapt_rq_client");
+
+      adaptation_target_ = adaptation_target;
   
     }
 
@@ -173,6 +171,8 @@ class OnStartAdapt : public AdaptNode
       request->adaptation_options = _var_params;
       request->task_identifier = registrationName();
       request->adaptation_strategy = strategy_name;
+      request->adaptation_target = adaptation_target_;
+
 
       future_response_ = adapt_client_->async_send_request(request).share();
       time_request_sent_ = node_->now();
@@ -308,12 +308,14 @@ class OnStartAdapt : public AdaptNode
 
 class OnRunningAdapt : public AdaptNode
 {
+  static constexpr const char* WINDOW_LEN = "adaptation_period";
   public:
-    OnRunningAdapt(const std::string& name, const NodeConfig& config) : AdaptNode(name, config)
+    OnRunningAdapt(const std::string& name, const NodeConfig& config, const std::string& adaptation_target) : AdaptNode(name, config)
     { 
       std::cout << "\n\n\n\nSomeone created me a OnRunningAdapt node!!!!\n\n\n\n\n" << std::endl;
       node_ = rclcpp::Node::make_shared("adapt_rq_client");
-  
+      adaptation_target_ = adaptation_target;
+
     }
 
     static PortsList providedPorts()
@@ -321,6 +323,7 @@ class OnRunningAdapt : public AdaptNode
       PortsList base_ports = AdaptNode::providedPorts();
 
       PortsList child_ports =  {
+        InputPort<int>(WINDOW_LEN, "The periodicity with which the adaptation should occur during running.")
               };
       child_ports.merge(base_ports);
 
@@ -336,121 +339,137 @@ class OnRunningAdapt : public AdaptNode
       callback_group_executor_.add_callback_group(callback_group_, node_->get_node_base_interface());
       adapt_client_ = node_->create_client<rebet_msgs::srv::RequestAdaptation>("/request_adaptation", rmw_qos_profile_services_default, callback_group_);
 
+      getInput(WINDOW_LEN,_window_length);
+
       setStatus(NodeStatus::RUNNING);
 
       response_received_ = false;
-      future_response_ = {};
-      // on_feedback_state_change_ = NodeStatus::RUNNING;
-      response_ = {};
-
-      std::string strategy_name;
-      getInput(ADAP_STRAT,strategy_name);
-      auto request = std::make_shared<rebet_msgs::srv::RequestAdaptation::Request>();
-
-      request->adaptation_options = _var_params;
-      request->task_identifier = registrationName();
-      request->adaptation_strategy = strategy_name;
-
-      future_response_ = adapt_client_->async_send_request(request).share();
-      time_request_sent_ = node_->now();
 
       return NodeStatus::RUNNING;
   }
   if (status() == NodeStatus::RUNNING)
-  { 
-    
-    //std::cout << "Made it into running" << std::endl;
-    callback_group_executor_.spin_some();
-    
-    // FIRST case: check if the goal request has a timeout
-    if( !response_received_ )
-    {
-      std::cout << "no response received (yet)" << std::endl;
+  {
 
-      auto const nodelay = std::chrono::milliseconds(0);
-      auto const timeout = rclcpp::Duration::from_seconds( double(service_timeout_.count()) / 1000);
+    auto curr_time_pointer = std::chrono::system_clock::now();
+    int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
+    int elapsed_seconds = current_time-_window_start;
+    const NodeStatus child_status = child_node_->executeTick();
 
-      auto ret = callback_group_executor_.spin_until_future_complete(future_response_, nodelay);
 
-      if (ret != rclcpp::FutureReturnCode::SUCCESS)
+    bool window_expired = elapsed_seconds >= _window_length;
+    // if(within_window){
+
+    // }
+    if(window_expired && !request_sent_){
+      std::cout << "window expired no request sent" << std::endl;
+
+      std::string strategy_name;
+      getInput(ADAP_STRAT,strategy_name);
+      
+      auto request = std::make_shared<rebet_msgs::srv::RequestAdaptation::Request>();
+
+      future_response_ = {};
+      request->adaptation_options = _var_params;
+      request->task_identifier = registrationName();
+      request->adaptation_strategy = strategy_name;
+      request->adaptation_target = adaptation_target_;
+      
+      future_response_ = adapt_client_->async_send_request(request).share();
+      time_request_sent_ = node_->now();
+      
+      request_sent_ = true;
+      response_received_ = false;
+    } 
+    else if(window_expired && request_sent_){
+      
+      callback_group_executor_.spin_some();
+
+          // FIRST case: check if the goal request has a timeout
+      if(!response_received_ )
       {
-        std::cout << "Not a success response (yet)" << std::endl;
+        std::cout << "no response received (yet)" << std::endl;
 
-        if( (node_->now() - time_request_sent_) > timeout )
+        auto const nodelay = std::chrono::milliseconds(0);
+        auto const timeout = rclcpp::Duration::from_seconds( double(service_timeout_.count()) / 1000);
+
+        auto ret = callback_group_executor_.spin_until_future_complete(future_response_, nodelay);
+
+        if (ret != rclcpp::FutureReturnCode::SUCCESS)
         {
-          throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly?"); 
-        }
-        else{
-          std::cout << "Not a success response (yet) returning running" << std::endl;
+          std::cout << "Not a success response (yet)" << std::endl;
 
-          return NodeStatus::RUNNING;
+          if( (node_->now() - time_request_sent_) > timeout )
+          {
+            throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly?"); 
+          }
+          else{
+            std::cout << "Not a success response (yet) returning running" << std::endl;
+          }
+        }
+        else
+        {
+          std::cout << "Response received!" << std::endl;
+
+          response_received_ = true;
+          response_ = future_response_.get();
+          std::cout << "Got response from future!" << std::endl;
+
+          // future_response_ = {};
+          //You could check response success here
+
+          if (!response_) {
+            throw std::runtime_error("Request was rejected by the service");
+          }
+
+          //Reset window
+          _window_start = current_time;
+
+          response_ = {};
+          request_sent_ = false;
         }
       }
-      else
-      {
-        std::cout << "Response received!" << std::endl;
 
-        response_received_ = true;
-        response_ = future_response_.get();
-        std::cout << "Got response from future!" << std::endl;
-
-        // future_response_ = {};
-
-        //You could check response success here
-
-        if (!response_) {
-          throw std::runtime_error("Request was rejected by the service");
-        }
-      }
     }
-    else
+    if( (elapsed_seconds % 3) == 0 ){
+      std::cout << "window not expired yet " << elapsed_seconds << std::endl;
+    }
+
+    switch (child_status)
     {
-      //Response received
-      //std::cout << "Outside of IDLE within adapt dec node" << std::endl;
-      const NodeStatus child_status = child_node_->executeTick();
-
-      //std::cout << "ticked child in adapt dec" << std::endl;
-
-
-
-      switch (child_status)
-      {
-        case NodeStatus::SUCCESS: {
-          resetChild();
-          std::cout << "success child in adapt dec" << std::endl;
-          return NodeStatus::SUCCESS;
-        }
-
-        case NodeStatus::FAILURE: {
-          resetChild();
-          std::cout << "failure child in adapt dec" << std::endl;
-
-          return NodeStatus::FAILURE;
-        }
-
-        case NodeStatus::RUNNING: {
-          //std::cout << "running child in adapt dec" << std::endl;
-
-          return NodeStatus::RUNNING;
-        }
-        case NodeStatus::SKIPPED: {
-          std::cout << "skipped child in adapt dec" << std::endl;
-
-          return NodeStatus::SKIPPED;
-        }
-        case NodeStatus::IDLE: {
-          throw LogicError("[", name(), "]: A child should not return IDLE");
-        }
+      case NodeStatus::SUCCESS: {
+        resetChild();
+        std::cout << "success child in adapt dec" << std::endl;
+        return NodeStatus::SUCCESS;
       }
-      //I don't know when this would happen but OK
-      return status();
 
+      case NodeStatus::FAILURE: {
+        resetChild();
+        std::cout << "failure child in adapt dec" << std::endl;
+
+        return NodeStatus::FAILURE;
+      }
+
+      case NodeStatus::RUNNING: {
+        //std::cout << "running child in adapt dec" << std::endl;
+
+        return NodeStatus::RUNNING;
+      }
+      case NodeStatus::SKIPPED: {
+        std::cout << "skipped child in adapt dec" << std::endl;
+
+        return NodeStatus::SKIPPED;
+      }
+      case NodeStatus::IDLE: {
+        throw LogicError("[", name(), "]: A child should not return IDLE");
+      }
     }
+    //I don't know when this would happen but OK
+    return status();
 
-
+    
   }
   //I don't know when this would happen but OK
-  return NodeStatus::RUNNING;
+  return status();
   }
 
 
@@ -464,6 +483,7 @@ class OnRunningAdapt : public AdaptNode
       std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(1000);
       bool response_received_ = false;
       rclcpp::Time time_request_sent_;
+      bool request_sent_ = false;
       std::shared_ptr<rclcpp::Node> node_;
       rclcpp::Client<rebet_msgs::srv::RequestAdaptation>::SharedPtr adapt_client_;
       rclcpp::executors::SingleThreadedExecutor callback_group_executor_;
@@ -490,7 +510,7 @@ class AdaptPictureRate : public OnStartAdapt
     const std::string PICTURE_RT_PARAM = "pic_rate";
     const std::string ACTION_SRVR = "identify_action_server"; //now unnecessary, should be removed..
 
-    AdaptPictureRate(const std::string& name, const NodeConfig& config) : OnStartAdapt(name, config)
+    AdaptPictureRate(const std::string& name, const NodeConfig& config) : OnStartAdapt(name, config, "blackboard")
     {
       std::vector<int> pc_rate_values{1, 3, 5, 7};
       registerAdaptations<int>(pc_rate_values, PICTURE_RT_PARAM, ACTION_SRVR);
@@ -503,6 +523,37 @@ class AdaptPictureRate : public OnStartAdapt
     static PortsList providedPorts()
     {
       PortsList base_ports = OnStartAdapt::providedPorts();
+
+      PortsList child_ports =  {
+              };
+      child_ports.merge(base_ports);
+
+      return child_ports;
+    }
+
+
+};
+
+class AdaptSpiralAltitude : public OnRunningAdapt
+{
+  public:
+
+    const std::string ALTITUDE_PARAM = "spiral_altitude";
+    const std::string ACTION_SRVR = "f_generate_search_path_node";
+
+    AdaptSpiralAltitude(const std::string& name, const NodeConfig& config) : OnRunningAdapt(name, config, "ros_node")
+    {
+      std::vector<double> altitude_values{1.0, 2.0, 3.0};
+      registerAdaptations<double>(altitude_values, ALTITUDE_PARAM, ACTION_SRVR);
+
+      //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.
+      setOutput(VARIABLE_PARAMS, _var_params); 
+  
+    }
+
+    static PortsList providedPorts()
+    {
+      PortsList base_ports = OnRunningAdapt::providedPorts();
 
       PortsList child_ports =  {
               };

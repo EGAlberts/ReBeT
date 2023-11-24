@@ -7,6 +7,7 @@ from std_msgs.msg import Float64
 from rebet_msgs.msg import AdaptationState, Configuration, QRValue
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
+from rcl_interfaces.srv import SetParameters
 from rebet.adaptation_strategies import create_strategy
 from itertools import product
 import numpy as np
@@ -31,8 +32,10 @@ class AdaptationManager(Node):
         # self.timer = self.create_timer(self.adaptation_period, self.timer_callback)
         self.srv_adapt = self.create_service(RequestAdaptation, '/request_adaptation',self.adaptation_requested)
         
-        self.cli_exec = self.create_client(SetParameterInBlackboard, '/set_parameter_in_blackboard', callback_group=exclusive_group)
-        self.req_exec = SetParameterInBlackboard.Request()
+        self.cli_bb_exec = self.create_client(SetParameterInBlackboard, '/set_parameter_in_blackboard', callback_group=exclusive_group)
+        self.req_bb_exec = SetParameterInBlackboard.Request()
+
+        self.req_rp_exec = SetParameters.Request()
 
 
         self.cli_qr = self.create_client(GetQR, '/get_qr', callback_group=exclusive_group)
@@ -47,6 +50,7 @@ class AdaptationManager(Node):
         self.reporting = [0,0]
 
         self.bounds_dict = {}
+        self.set_parameter_client_dict = {}
 
 
     def dynamic_bounding(self, utility, bounds):
@@ -152,14 +156,57 @@ class AdaptationManager(Node):
         return config_list
 
 
-    def execute_adaptation(self):
+    def execute_bb_adaptation(self, config_msg):        
+        self.req_bb_exec.ros_parameters = config_msg.configuration_parameters
 
-        while not self.cli_exec.wait_for_service(timeout_sec=1.0):
+        while not self.cli_bb_exec.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('set param in bb service not available, waiting again...')
         
-        response = self.cli_exec.call(self.req_exec)    
+        response = self.cli_bb_exec.call(self.req_exec)    
 
         return response.success
+
+
+
+    def create_set_param_client(self, node_name):
+        self.set_parameter_client_dict[node_name] = self.create_client(SetParameters, '/' + node_name + '/set_parameters', callback_group=MutuallyExclusiveCallbackGroup())
+
+    def execute_rp_adaptation(self, config_msg):
+        send_dict = {}
+        node_names = config_msg.node_names
+        params = config_msg.configuration_parameters
+        
+        for i in range(len(node_names)):
+            curr_node_name = node_names[i]
+            if curr_node_name not in send_dict: send_dict[curr_node_name] = [params[i]]
+            else:
+                send_dict[curr_node_name].append(params[i])
+
+        #send requests
+
+        self.get_logger().info('Send dict: !! ' + str(send_dict))
+        
+        for node_name in list(send_dict.keys()):
+            self.req_rp_exec.parameters = send_dict[node_name]
+
+            if node_name not in self.set_parameter_client_dict: 
+                self.create_set_param_client(node_name)
+
+            client = self.set_parameter_client_dict[node_name]
+
+            while not client.wait_for_service(timeout_sec=1.0):
+                        self.get_logger().info('set_param service not available, waiting again...')
+            
+            response = client.call(self.req_rp_exec)
+            
+            if(not all([res.successful for res in response.results])):
+                self.get_logger().warning('One or more requests to set a parameter were unsuccessful in the Bandit, see reason(s):' + str(response.results))
+                return False
+            
+        return True
+        
+    
+
 
     def timer_callback(self):        
         #I should probably make functions like these into utilities, like as members of a subclass of Node..
@@ -178,29 +225,30 @@ class AdaptationManager(Node):
     def adaptation_requested(self, request, response):
         task_identifier = str(request.task_identifier)
         adaptation_strategy = str(request.adaptation_strategy)
+        adaptation_target = str(request.adaptation_target)
         self.get_logger().info('\n\n\hi:\n\n\n\n\n')
 
         response.success = False
         adapt_state = AdaptationState()
         self.get_logger().info('\n\n pre sys util \n\n')
 
-        adapt_state.qr_values = self.get_system_utility()
-        self.get_logger().info('\n\n sys util \n\n')
+        # adapt_state.qr_values = self.get_system_utility()
+        # self.get_logger().info('\n\n sys util \n\n')
 
         adapt_state.system_possible_configurations = self.make_configurations(request.adaptation_options)
 
         self.get_logger().info(str(adapt_state.system_possible_configurations))
         
         
-        # all_the_qrs = []
+        all_the_qrs = []
 
-        # for i in range(5):
-        #     qr_val = QRValue()
-        #     qr_val.name = "test"
-        #     qr_val.qr_fulfilment = 5.0
-        #     all_the_qrs.append(qr_val)
+        for i in range(5):
+            qr_val = QRValue()
+            qr_val.name = "test"
+            qr_val.qr_fulfilment = 5.0
+            all_the_qrs.append(qr_val)
 
-        # msg.qr_values = all_the_qrs
+        adapt_state.qr_values = all_the_qrs
 
         #new task or new strategy for the same task.
 
@@ -221,9 +269,21 @@ class AdaptationManager(Node):
 
 
         
-        self.req_exec.ros_parameters = self.task_to_strategy_map[task_identifier].suggest_adaptation(adapt_state).configuration_parameters
-        is_exec_success = self.execute_adaptation()
+        suggested_configuration = self.task_to_strategy_map[task_identifier].suggest_adaptation(adapt_state)
 
+        
+        if(adaptation_target == "ros_node"):
+            self.get_logger().info('\n\n ros_node adaptation \n\n')
+
+            is_exec_success = self.execute_rp_adaptation(suggested_configuration)
+        elif(adaptation_target == "blackboard"):
+            self.get_logger().info('\n\n blackboard adaptation \n\n')
+            is_exec_success = self.execute_bb_adaptation(suggested_configuration)
+        else:
+            self.get_logger().error("Unknown or unspecified adaptation_target")
+            response.success = False
+            return response
+        
         response.success = is_exec_success
         
         return response

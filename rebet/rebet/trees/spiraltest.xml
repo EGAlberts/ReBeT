@@ -1,15 +1,20 @@
 <root BTCPP_format="4">
   <BehaviorTree ID="Untitled">
-	<Sequence>
-		<Script code="armed_choice:=true; mavros_mode:='GUIDED'"/>
-		<ArmMotors armed_or_not="{armed_choice}" service_name="/mavros/cmd/arming"/>
-		<SetMavrosMode desired_mode="{mavros_mode}" service_name="/mavros/set_mode"/>
-		<RetryUntilSuccessful num_attempts="-1">
-			<ConfirmMavrosState mode_to_confirm="{mavros_mode}" armed_to_confirm="{armed_choice}" topic_name="/mavros/state"/>
-		</RetryUntilSuccessful>
-		<AdaptSpiralAltitude adaptation_period="10" variable_parameters="{spi_var_params}" adaptation_strategy="ucb_strategy">
-			<SpiralSearch/>
-		</AdaptSpiralAltitude>
-	</Sequence>
+		<AdaptThrusterRecovery thruster_status_one="{c_thruster_1}" thruster_status_two="{c_thruster_2}" thruster_status_three="{c_thruster_3}" thruster_status_four="{c_thruster_4}" thruster_status_five="{c_thruster_5}" thruster_status_six="{c_thruster_6}">
+		<Sequence>
+			<Script code="armed_choice:=true; mavros_mode:='GUIDED'"/>
+			<ArmMotors armed_or_not="{armed_choice}" service_name="/mavros/cmd/arming"/>
+			<SetMavrosMode desired_mode="{mavros_mode}" service_name="/mavros/set_mode"/>
+			<RetryUntilSuccessful num_attempts="-1">
+				<ConfirmMavrosState mode_to_confirm="{mavros_mode}" armed_to_confirm="{armed_choice}" topic_name="/mavros/state"/>
+			</RetryUntilSuccessful>
+			<SearchEfficiencyQR in_water_visibility="{water_visibility}">
+				<AdaptSpiralAltitude adaptation_period="10" variable_parameters="{spi_var_params}" adaptation_strategy="ucb_strategy">
+					<SpiralSearch/>
+				</AdaptSpiralAltitude>
+			</SearchEfficiencyQR>
+		</Sequence>
+		</AdaptThrusterRecovery>
+
   </BehaviorTree>
 </root>

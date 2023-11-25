@@ -12,6 +12,7 @@
 #include "rebet_msgs/msg/system_attribute_type.hpp"
 
 #include "nav_msgs/msg/odometry.hpp"
+#include "diagnostic_msgs/msg/key_value.hpp"
 
 
 //Inspired by rclcpp/parameter_value.hpp
@@ -23,6 +24,8 @@ enum SystemAttributeType : uint8_t
 {
   ATTRIBUTE_NOT_SET = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_NOT_SET,
   ATTRIBUTE_ODOM    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_ODOM,
+  ATTRIBUTE_DIAG    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_DIAG,
+
 };
 
 /// Return the name of a parameter type
@@ -58,6 +61,9 @@ public:
   /// Construct a parameter value with type PARAMETER_BOOL.
   explicit SystemAttributeValue(const nav_msgs::msg::Odometry odom_value);
 
+  explicit SystemAttributeValue(const diagnostic_msgs::msg::KeyValue diag_value);
+
+
   /// Return an enum indicating the type of the set value.
   
   SystemAttributeType
@@ -89,6 +95,17 @@ public:
       throw SystemAttributeTypeException(SystemAttributeType::ATTRIBUTE_ODOM, get_type());
     }
     return value_.odom_value;
+  }
+
+  template<SystemAttributeType type>
+  constexpr
+  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_DIAG, const diagnostic_msgs::msg::KeyValue &>::type
+  get() const
+  {
+    if (value_.type != rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_DIAG) {
+      throw SystemAttributeTypeException(SystemAttributeType::ATTRIBUTE_DIAG, get_type());
+    }
+    return value_.diag_value;
   }
 
   

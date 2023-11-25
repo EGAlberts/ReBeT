@@ -374,6 +374,101 @@ class PowerQR : public QRNode
 
 };
 
+class SearchEfficiencyQR : public QRNode
+{
+  public:
+    SearchEfficiencyQR(const std::string& name, const NodeConfig& config) : QRNode(name, config)
+    {
+      _window_start = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
+      _last_timestamp = builtin_interfaces::msg::Time();
+
+      _water_visibilities = {};
+  
+    }
+
+    void initialize(int window_length)
+    {
+        _window_length = window_length;
+    }
+
+
+    static PortsList providedPorts()
+    {
+      PortsList base_ports = QRNode::providedPorts();
+
+      PortsList child_ports =  {
+              InputPort<rebet::SystemAttributeValue>(IN_WATER,"water_visibility message wrapped in keyvalue message wrapped in a systemattributevalue instance"),
+
+              };
+      child_ports.merge(base_ports);
+
+      return child_ports;
+    }
+
+    virtual void calculate_measure() override
+    {
+      auto res = getInput(IN_WATER,_watervis_attribute); 
+
+      if(res)
+      {
+        auto as_sysatt_msg = _watervis_attribute.to_value_msg();
+        if(as_sysatt_msg.header.stamp != _last_timestamp)
+        {
+          _keyvalue_msg = _watervis_attribute.get<rebet::SystemAttributeType::ATTRIBUTE_DIAG>();
+          float water_visibility = std::stof(_keyvalue_msg.value);
+
+          _water_visibilities.push_back(water_visibility);
+
+          _last_timestamp = as_sysatt_msg.header.stamp;
+
+          std::cout << "new water vis received " << water_visibility; 
+        }
+      }
+
+      
+
+      auto curr_time_pointer = std::chrono::system_clock::now();
+      
+      int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
+      int elapsed_seconds = current_time-_window_start;
+      if(elapsed_seconds >= _window_length)
+      {
+        float wvis_sum = std::accumulate(_water_visibilities.begin(), _water_visibilities.end(), 0);
+        float average_water_vis = wvis_sum / (float)_water_visibilities.size();
+        _metric = (average_water_vis - _min_wvis) / (_max_wvis - _min_wvis);
+
+        output_metric();
+        metric_mean();
+        setOutput(MEAN_METRIC,_average_metric);
+        _window_start = current_time;
+        _water_visibilities = {};
+      }
+
+    }
+
+    private:
+      rebet::SystemAttributeValue _watervis_attribute;
+      diagnostic_msgs::msg::KeyValue _keyvalue_msg;
+
+
+      std::vector<float> _water_visibilities;
+      int _detected_in_window;
+      builtin_interfaces::msg::Time _last_timestamp;
+      double _max_detected;
+      double _max_object_ps;
+      int _window_length;
+      int _window_start;
+      int _coun_max_wvister;
+      float _max_wvis = 3.75; //This is a parameter for suave.. I'd say it should be linked, but ideally I'd just dynamically bound it instead.
+      float _min_wvis = 1.25; //idem ditto
+
+
+      static constexpr const char* IN_WATER = "in_water_visibility";
+
+};
+
+
 
 
 }   // namespace BT

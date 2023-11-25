@@ -1,6 +1,9 @@
 VariableParameters adaptation_options
 string task_identifier
 string adaptation_strategy
+#What the adaptation should change, TODO: change to be constrained choice.
 string adaptation_target
+#This transition should be specified if the adaptation_target is a ros lifecycle node
+lifecycle_msgs/Transition[] lifecycle_transitions
 ---
 bool success

@@ -21,6 +21,10 @@ find_package(sensor_msgs REQUIRED)
 find_package(slam_toolbox REQUIRED)
 find_package(suave_msgs REQUIRED)
 find_package(mavros_msgs REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
+find_package(lifecycle_msgs REQUIRED)
+
+
 
 
 
@@ -32,7 +36,7 @@ include_directories(include)
 # Create Cpp executable
 add_executable(arborist src/arborist_node.cpp src/system_attribute_value.cpp)
 
-ament_target_dependencies(arborist rclcpp behaviortree_ros2 behaviortree_cpp rebet_msgs geometry_msgs nav_msgs nav2_msgs sensor_msgs darknet_ros_msgs slam_toolbox suave_msgs mavros_msgs)
+ament_target_dependencies(arborist rclcpp behaviortree_ros2 behaviortree_cpp rebet_msgs lifecycle_msgs diagnostic_msgs geometry_msgs nav_msgs nav2_msgs sensor_msgs darknet_ros_msgs slam_toolbox suave_msgs mavros_msgs)
 
 # Install Cpp executables
 install(TARGETS

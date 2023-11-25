@@ -9,6 +9,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rcl_interfaces.srv import SetParameters
 from rebet.adaptation_strategies import create_strategy
+from lifecycle_msgs.srv import ChangeState
 from itertools import product
 import numpy as np
 import sys
@@ -37,6 +38,9 @@ class AdaptationManager(Node):
 
         self.req_rp_exec = SetParameters.Request()
 
+        self.req_lc_exec = ChangeState.Request()
+
+
 
         self.cli_qr = self.create_client(GetQR, '/get_qr', callback_group=exclusive_group)
         
@@ -51,6 +55,8 @@ class AdaptationManager(Node):
 
         self.bounds_dict = {}
         self.set_parameter_client_dict = {}
+        self.change_state_client_dict = {}
+
 
 
     def dynamic_bounding(self, utility, bounds):
@@ -171,6 +177,9 @@ class AdaptationManager(Node):
     def create_set_param_client(self, node_name):
         self.set_parameter_client_dict[node_name] = self.create_client(SetParameters, '/' + node_name + '/set_parameters', callback_group=MutuallyExclusiveCallbackGroup())
 
+    def create_change_state_client(self, node_name):
+        self.change_state_client_dict[node_name] = self.create_client(ChangeState, '/' + node_name + '/change_state', callback_group=MutuallyExclusiveCallbackGroup())
+
     def execute_rp_adaptation(self, config_msg):
         send_dict = {}
         node_names = config_msg.node_names
@@ -200,12 +209,43 @@ class AdaptationManager(Node):
             response = client.call(self.req_rp_exec)
             
             if(not all([res.successful for res in response.results])):
-                self.get_logger().warning('One or more requests to set a parameter were unsuccessful in the Bandit, see reason(s):' + str(response.results))
+                self.get_logger().warning('One or more requests to set a parameter were unsuccessful in the Adaptation Manager, see reason(s):' + str(response.results))
                 return False
             
         return True
-        
     
+    def execute_lc_adaptation(self, var_params, transitions):
+        
+        response_bools = []
+        node_names = [knob.node_name for knob in var_params.variable_parameters]
+
+        if(len(transitions) > len(node_names)):
+            self.get_logger().error("More transitions asked for than I have nodes to do so to, if you want multiple transitions send multiple requests!")
+            return False
+    
+
+
+        node_names = node_names[0:len(transitions)] #We consider that if you specify fewer transitions than nodes for whatever reason, I only transition as many as you specify transitions for.
+        
+        for i, node_name in enumerate(node_names):
+            self.req_lc_exec.transition = transitions[i]
+
+            if node_name not in self.change_state_client_dict: 
+                self.create_change_state_client(node_name)
+
+            client = self.change_state_client_dict[node_name]
+
+            while not client.wait_for_service(timeout_sec=1.0):
+                        self.get_logger().info('set_param service not available, waiting again...')
+            
+            response = client.call(self.req_lc_exec)
+            response_bools.append(response.success)
+            if(not response.success):
+               self.get_logger().warning('A request to change a state was unsuccessful in the Adaptation Manager')
+        
+        return all(response_bools)
+            
+
 
 
     def timer_callback(self):        
@@ -230,12 +270,23 @@ class AdaptationManager(Node):
 
         response.success = False
         adapt_state = AdaptationState()
+
+        #non-parametric adaptation
+        if(adaptation_target == "ros_lifecycle"): 
+            self.get_logger().info('\n\n ros_service adaptation \n\n')
+            is_exec_success = self.execute_lc_adaptation(request.adaptation_options, )
+            response.success = is_exec_success
+            return response
+
         self.get_logger().info('\n\n pre sys util \n\n')
+
+
+        #Parametric adaptation ahead
 
         # adapt_state.qr_values = self.get_system_utility()
         # self.get_logger().info('\n\n sys util \n\n')
 
-        adapt_state.system_possible_configurations = self.make_configurations(request.adaptation_options)
+        adapt_state.system_possible_configurations = self.make_configurations(request.adaptation_options, request.lifecycle_transitions)
 
         self.get_logger().info(str(adapt_state.system_possible_configurations))
         

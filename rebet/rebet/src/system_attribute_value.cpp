@@ -14,6 +14,8 @@ rebet::to_string(const SystemAttributeType type)
       return "not set";
     case SystemAttributeType::ATTRIBUTE_ODOM:
       return "odometry msg";
+    case SystemAttributeType::ATTRIBUTE_DIAG:
+      return "diagnostic keyvalue msg";
     default:
       return "unknown type";
   }
@@ -57,6 +59,8 @@ rebet::to_string(const SystemAttributeValue & value)
       return "not set";
     case SystemAttributeType::ATTRIBUTE_ODOM:
         return "odom message inside :) ";
+    case SystemAttributeType::ATTRIBUTE_DIAG:
+        return "diagnostic keyvalue message inside :) ";
     default:
       return "unknown type";
   }
@@ -72,6 +76,7 @@ SystemAttributeValue::SystemAttributeValue(const rebet_msgs::msg::SystemAttribut
   value_ = value;
   switch (value.type) {
     case ATTRIBUTE_ODOM:
+    case ATTRIBUTE_DIAG:
     case ATTRIBUTE_NOT_SET:
       break;
     default:
@@ -83,6 +88,12 @@ SystemAttributeValue::SystemAttributeValue(const nav_msgs::msg::Odometry odom_va
 {
   value_.odom_value = odom_value;
   value_.type = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_ODOM;
+}
+
+SystemAttributeValue::SystemAttributeValue(const diagnostic_msgs::msg::KeyValue diag_value)
+{
+  value_.diag_value = diag_value;
+  value_.type = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_DIAG;
 }
 
 SystemAttributeType

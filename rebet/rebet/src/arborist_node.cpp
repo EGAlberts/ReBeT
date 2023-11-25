@@ -11,7 +11,7 @@
 #include "rebet_msgs/action/behavior_tree.hpp"
 
 #include "rebet_msgs/srv/set_blackboard.hpp"
-#include "rebet_msgs/srv/set_attribute_in_blackboard.hpp"
+#include "rebet_msgs/srv/set_attributes_in_blackboard.hpp"
 #include "rebet_msgs/srv/set_parameter_in_blackboard.hpp"
 #include "rebet_msgs/srv/get_blackboard.hpp"
 #include "rebet_msgs/srv/get_qr.hpp"
@@ -60,7 +60,7 @@ class Arborist : public rclcpp::Node
 {
 public:
   using SystemAttributeValueMsg = rebet_msgs::msg::SystemAttributeValue;
-  using SetAttributeInBlackboard = rebet_msgs::srv::SetAttributeInBlackboard;
+  using SetAttributesInBlackboard = rebet_msgs::srv::SetAttributesInBlackboard;
   using SetParameterInBlackboard = rebet_msgs::srv::SetParameterInBlackboard;
   using SetBlackboard = rebet_msgs::srv::SetBlackboard;
   using GetBlackboard = rebet_msgs::srv::GetBlackboard;
@@ -88,7 +88,7 @@ public:
   Arborist(std::string name = "arborist_node") : Node(name)
   { 
       _set_param_in_blackboard = this->create_service<SetParameterInBlackboard>("set_parameter_in_blackboard", std::bind(&Arborist::handle_set_param_bb, this, _1, _2));
-      _set_att_in_blackboard = this->create_service<SetAttributeInBlackboard>("set_attribute_in_blackboard", std::bind(&Arborist::handle_set_atb_bb, this, _1, _2));
+      _set_att_in_blackboard = this->create_service<SetAttributesInBlackboard>("set_attributes_in_blackboard", std::bind(&Arborist::handle_set_atb_bb, this, _1, _2));
       _set_blackboard = this->create_service<SetBlackboard>("set_blackboard", std::bind(&Arborist::handle_set_bb, this, _1, _2));
       _get_blackboard = this->create_service<GetBlackboard>("get_blackboard", std::bind(&Arborist::handle_get_bb, this, _1, _2));
       _get_qr = this->create_service<GetQR>("get_qr", std::bind(&Arborist::handle_get_qr, this, _1, _2));
@@ -129,9 +129,10 @@ public:
       
       factory.registerNodeType<TaskEfficiencyQR>("TaskEfficiencyQR");
       factory.registerNodeType<PowerQR>("PowerQR");
+      factory.registerNodeType<SearchEfficiencyQR>("SearchEfficiencyQR");
       factory.registerNodeType<AdaptPictureRate>("AdaptPictureRate");
       factory.registerNodeType<AdaptSpiralAltitude>("AdaptSpiralAltitude");
-
+      factory.registerNodeType<AdaptThrusterRecovery>("AdaptThrusterRecovery");
 
 
 
@@ -173,6 +174,10 @@ public:
         {
           power_qr_node->initialize(max_pics_ps,
                                        eng_window_length);
+        }
+        if (auto search_qr_node = dynamic_cast<SearchEfficiencyQR*>(node))
+        {
+          search_qr_node->initialize(5);
         }
       };
 
@@ -256,16 +261,16 @@ private:
 
 
 
-  void handle_set_atb_bb(const std::shared_ptr<SetAttributeInBlackboard::Request> request,
-        std::shared_ptr<SetAttributeInBlackboard::Response> response)
+  void handle_set_atb_bb(const std::shared_ptr<SetAttributesInBlackboard::Request> request,
+        std::shared_ptr<SetAttributesInBlackboard::Response> response)
   {
-    RCLCPP_INFO(this->get_logger(), "Set Attribute Service Called in Arborist Node");
+    RCLCPP_INFO(this->get_logger(), "Set Attributes Service Called in Arborist Node");
 
-    auto sys_attr = request->sys_attribute;
-
-    auto sys_attvalue_obj = rebet::SystemAttributeValue(sys_attr.value);
-    tree.rootBlackboard()->set<rebet::SystemAttributeValue>(sys_attr.name, sys_attvalue_obj);
-    
+    for (auto const & sys_attr : request->sys_attributes)
+    {
+      auto sys_attvalue_obj = rebet::SystemAttributeValue(sys_attr.value);
+      tree.rootBlackboard()->set<rebet::SystemAttributeValue>(sys_attr.name, sys_attvalue_obj);
+    }
     response->success = true;
   }
 
@@ -687,7 +692,7 @@ private:
   rclcpp::Service<GetQR>::SharedPtr _get_qr;
   rclcpp::Service<GetVParams>::SharedPtr _get_var_param;
   rclcpp::Service<SetWeights>::SharedPtr _set_weights;
-  rclcpp::Service<SetAttributeInBlackboard>::SharedPtr _set_att_in_blackboard;
+  rclcpp::Service<SetAttributesInBlackboard>::SharedPtr _set_att_in_blackboard;
   rclcpp::Service<SetParameterInBlackboard>::SharedPtr _set_param_in_blackboard;
 
 

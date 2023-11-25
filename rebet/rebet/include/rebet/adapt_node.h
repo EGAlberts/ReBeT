@@ -14,7 +14,7 @@
 #include "rebet_msgs/msg/variable_parameters.hpp"
 #include "rebet_msgs/msg/variable_parameter.hpp"
 #include "rcl_interfaces/msg/parameter_value.hpp"
-
+#include "lifecycle_msgs/msg/transition.hpp"
 namespace BT
 {
 /**
@@ -122,6 +122,8 @@ private:
     std::string adaptation_target_;
 
     VariableParameters _var_params = VariableParameters();
+    std::vector<lifecycle_msgs::msg::Transition> _transitions = {};
+
 
 };
 
@@ -172,6 +174,7 @@ class OnStartAdapt : public AdaptNode
       request->task_identifier = registrationName();
       request->adaptation_strategy = strategy_name;
       request->adaptation_target = adaptation_target_;
+      request->lifecycle_transitions = _transitions;
 
 
       future_response_ = adapt_client_->async_send_request(request).share();
@@ -373,6 +376,8 @@ class OnRunningAdapt : public AdaptNode
       request->task_identifier = registrationName();
       request->adaptation_strategy = strategy_name;
       request->adaptation_target = adaptation_target_;
+      request->lifecycle_transitions = _transitions;
+
       
       future_response_ = adapt_client_->async_send_request(request).share();
       time_request_sent_ = node_->now();
@@ -430,9 +435,9 @@ class OnRunningAdapt : public AdaptNode
       }
 
     }
-    if( (elapsed_seconds % 3) == 0 ){
-      std::cout << "window not expired yet " << elapsed_seconds << std::endl;
-    }
+    // if( (elapsed_seconds % 3) == 0 ){
+    //   std::cout << "window not expired yet " << elapsed_seconds << std::endl;
+    // }
 
     switch (child_status)
     {
@@ -503,6 +508,191 @@ class OnRunningAdapt : public AdaptNode
 
 };
 
+//It is not lost on me that right now adapt on running is just oncondition with a time window
+class OnConditionAdapt : public AdaptNode
+{
+  public:
+    OnConditionAdapt(const std::string& name, const NodeConfig& config, const std::string& adaptation_target) : AdaptNode(name, config)
+    { 
+      std::cout << "\n\n\n\nSomeone created me a OnEventAdapt node!!!!\n\n\n\n\n" << std::endl;
+      node_ = rclcpp::Node::make_shared("adapt_rq_client");
+      adaptation_target_ = adaptation_target;
+
+    }
+    static PortsList providedPorts()
+    {
+      PortsList base_ports = AdaptNode::providedPorts();
+
+      PortsList child_ports =  {
+              };
+      child_ports.merge(base_ports);
+
+      return child_ports;
+    }
+
+  virtual bool evaluate_condition()
+  {
+    std::cout << "Here's where I would evaluate a condition... if I had one" << std::endl;
+    return false;
+  }
+
+  virtual NodeStatus tick() override
+  {
+  //Shamelessly taken from bt_service_node :) 
+  if(status() == NodeStatus::IDLE )
+  {
+      callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+      callback_group_executor_.add_callback_group(callback_group_, node_->get_node_base_interface());
+      adapt_client_ = node_->create_client<rebet_msgs::srv::RequestAdaptation>("/request_adaptation", rmw_qos_profile_services_default, callback_group_);
+
+      setStatus(NodeStatus::RUNNING);
+
+      response_received_ = false;
+
+      return NodeStatus::RUNNING;
+  }
+  if (status() == NodeStatus::RUNNING)
+  {
+    const NodeStatus child_status = child_node_->executeTick();
+
+    if(!_to_adapt) //I only want to evaluate the again condition after a trigger is processed.
+    {
+      _to_adapt = evaluate_condition();
+    }
+
+    if(_to_adapt && !request_sent_){
+      std::cout << "condition met but no request sent" << std::endl;
+
+      std::string strategy_name;
+      getInput(ADAP_STRAT,strategy_name);
+      
+      auto request = std::make_shared<rebet_msgs::srv::RequestAdaptation::Request>();
+
+      future_response_ = {};
+      request->adaptation_options = _var_params;
+      request->task_identifier = registrationName();
+      request->adaptation_strategy = strategy_name;
+      request->adaptation_target = adaptation_target_;
+      request->lifecycle_transitions = _transitions;
+
+      
+      future_response_ = adapt_client_->async_send_request(request).share();
+      time_request_sent_ = node_->now();
+      
+      request_sent_ = true;
+      response_received_ = false;
+    } 
+    else if(_to_adapt && request_sent_){
+      
+      callback_group_executor_.spin_some();
+
+          // FIRST case: check if the goal request has a timeout
+      if(!response_received_ )
+      {
+        std::cout << "no response received (yet)" << std::endl;
+
+        auto const nodelay = std::chrono::milliseconds(0);
+        auto const timeout = rclcpp::Duration::from_seconds( double(service_timeout_.count()) / 1000);
+
+        auto ret = callback_group_executor_.spin_until_future_complete(future_response_, nodelay);
+
+        if (ret != rclcpp::FutureReturnCode::SUCCESS)
+        {
+          std::cout << "Not a success response (yet)" << std::endl;
+
+          if( (node_->now() - time_request_sent_) > timeout )
+          {
+            throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly?"); 
+          }
+          else{
+            std::cout << "Not a success response (yet) returning running" << std::endl;
+          }
+        }
+        else
+        {
+          std::cout << "Response received!" << std::endl;
+
+          response_received_ = true;
+          response_ = future_response_.get();
+          std::cout << "Got response from future!" << std::endl;
+
+          // future_response_ = {};
+          //You could check response success here
+
+          if (!response_) {
+            throw std::runtime_error("Request was rejected by the service");
+          }
+
+          _to_adapt = false; //Reset condition.
+
+          response_ = {};
+          request_sent_ = false;
+        }
+      }
+
+    }
+    // if( (elapsed_seconds % 3) == 0 ){
+    //   std::cout << "window not expired yet " << elapsed_seconds << std::endl;
+    // }
+
+    switch (child_status)
+    {
+      case NodeStatus::SUCCESS: {
+        resetChild();
+        std::cout << "success child in adapt dec" << std::endl;
+        return NodeStatus::SUCCESS;
+      }
+
+      case NodeStatus::FAILURE: {
+        resetChild();
+        std::cout << "failure child in adapt dec" << std::endl;
+
+        return NodeStatus::FAILURE;
+      }
+
+      case NodeStatus::RUNNING: {
+        //std::cout << "running child in adapt dec" << std::endl;
+
+        return NodeStatus::RUNNING;
+      }
+      case NodeStatus::SKIPPED: {
+        std::cout << "skipped child in adapt dec" << std::endl;
+
+        return NodeStatus::SKIPPED;
+      }
+      case NodeStatus::IDLE: {
+        throw LogicError("[", name(), "]: A child should not return IDLE");
+      }
+    }
+    //I don't know when this would happen but OK
+    return status();
+
+    
+  }
+  //I don't know when this would happen but OK
+  return status();
+  }
+
+    private:
+      rclcpp::CallbackGroup::SharedPtr callback_group_;
+      rebet_msgs::srv::RequestAdaptation::Response::SharedPtr response_;
+      std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(1000);
+      bool response_received_ = false;
+      rclcpp::Time time_request_sent_;
+      bool request_sent_ = false;
+      std::shared_ptr<rclcpp::Node> node_;
+      rclcpp::Client<rebet_msgs::srv::RequestAdaptation>::SharedPtr adapt_client_;
+      rclcpp::executors::SingleThreadedExecutor callback_group_executor_;
+      bool adapted_yet = false;
+      std::shared_future<rebet_msgs::srv::RequestAdaptation::Response::SharedPtr> future_response_;
+      bool _to_adapt = false;
+      builtin_interfaces::msg::Time _last_timestamp;
+
+
+      int _counter;
+
+};
+
 class AdaptPictureRate : public OnStartAdapt
 {
   public:
@@ -563,6 +753,83 @@ class AdaptSpiralAltitude : public OnRunningAdapt
     }
 
 
+};
+
+class AdaptThrusterRecovery : public OnConditionAdapt
+{
+  public:
+
+    const std::string LIFECYCLE_NODE = "f_maintain_motion_node";
+
+    AdaptThrusterRecovery(const std::string& name, const NodeConfig& config) : OnConditionAdapt(name, config, "ros_lifecycle")
+    {
+      registerAdaptations<double>({}, "", LIFECYCLE_NODE);
+
+      //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.
+      setOutput(VARIABLE_PARAMS, _var_params); 
+
+
+  
+    }
+
+    static PortsList providedPorts()
+    {
+      PortsList base_ports = OnRunningAdapt::providedPorts();
+
+      PortsList child_ports =  {
+        InputPort<rebet::SystemAttributeValue>(STATUS_ONE, "status of thruster"),
+        InputPort<rebet::SystemAttributeValue>(STATUS_TWO, "status of thruster"),
+        InputPort<rebet::SystemAttributeValue>(STATUS_THREE, "status of thruster"),
+        InputPort<rebet::SystemAttributeValue>(STATUS_FOUR, "status of thruster"),
+        InputPort<rebet::SystemAttributeValue>(STATUS_FIVE, "status of thruster"),
+        InputPort<rebet::SystemAttributeValue>(STATUS_SIX, "status of thruster"),
+              };
+      child_ports.merge(base_ports);
+
+      return child_ports;
+    }
+
+    virtual bool evaluate_condition() override
+    { 
+      for (auto const & status_portname : thruster_stati)
+      {
+        rebet::SystemAttributeValue thruster_status_att; 
+        auto res = getInput(status_portname, thruster_status_att);
+
+        if(res)
+        {
+          diagnostic_msgs::msg::KeyValue keyvalue_msg = thruster_status_att.get<rebet::SystemAttributeType::ATTRIBUTE_DIAG>();
+          
+          if(keyvalue_msg.value == "FALSE")
+          {
+            _transitions = {};
+            lifecycle_msgs::msg::Transition transition;
+            transition.id = 3; //Activate transition
+            _transitions.push_back(transition);
+            return true; //Condition met!
+          }
+          else if(keyvalue_msg.value == "RECOVERED")
+          {
+            _transitions = {};
+            lifecycle_msgs::msg::Transition transition;
+            transition.id = 4; //Deactivate transition
+            _transitions.push_back(transition);
+            return true; //Condition met!
+          }
+        }
+
+      }
+      return false;
+    }
+  private:
+      static constexpr const char* STATUS_ONE = "thruster_status_one";
+      static constexpr const char* STATUS_TWO = "thruster_status_two";
+      static constexpr const char* STATUS_THREE = "thruster_status_three";
+      static constexpr const char* STATUS_FOUR = "thruster_status_four";
+      static constexpr const char* STATUS_FIVE = "thruster_status_five";
+      static constexpr const char* STATUS_SIX = "thruster_status_six";
+
+      std::vector<std::string> thruster_stati = {STATUS_ONE, STATUS_TWO, STATUS_THREE, STATUS_FOUR, STATUS_FIVE, STATUS_SIX};
 };
 
 }   // namespace BT

@@ -4,8 +4,9 @@
 
 # (if gotten) or is uninitialized.
 
-# Values are enumerated in `ParameterType.msg`.
+# Values are enumerated in `SystemAttributeType.msg`.
 
+std_msgs/Header header
 
 # The type of this parameter, which corresponds to the appropriate field below.
 
@@ -20,3 +21,4 @@ uint8 type
 
 nav_msgs/Odometry odom_value
 
+diagnostic_msgs/KeyValue diag_value

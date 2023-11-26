@@ -215,6 +215,8 @@ class AdaptationManager(Node):
         return True
     
     def execute_lc_adaptation(self, var_params, transitions):
+        self.get_logger().info("\n\n\ LC adaptation \n\n\n\n\n")
+
         
         response_bools = []
         node_names = [knob.node_name for knob in var_params.variable_parameters]
@@ -235,14 +237,20 @@ class AdaptationManager(Node):
 
             client = self.change_state_client_dict[node_name]
 
+
             while not client.wait_for_service(timeout_sec=1.0):
                         self.get_logger().info('set_param service not available, waiting again...')
             
+            self.get_logger().info("\n\n\Sending LC adaptation request\n\n\n\n\n")
+
             response = client.call(self.req_lc_exec)
             response_bools.append(response.success)
             if(not response.success):
                self.get_logger().warning('A request to change a state was unsuccessful in the Adaptation Manager')
         
+
+        self.get_logger().info("\n\n\nFinishing LC adaptation\n\n\n\n\n")
+
         return all(response_bools)
             
 
@@ -274,7 +282,7 @@ class AdaptationManager(Node):
         #non-parametric adaptation
         if(adaptation_target == "ros_lifecycle"): 
             self.get_logger().info('\n\n ros_service adaptation \n\n')
-            is_exec_success = self.execute_lc_adaptation(request.adaptation_options, )
+            is_exec_success = self.execute_lc_adaptation(request.adaptation_options, request.lifecycle_transitions)
             response.success = is_exec_success
             return response
 
@@ -286,7 +294,7 @@ class AdaptationManager(Node):
         # adapt_state.qr_values = self.get_system_utility()
         # self.get_logger().info('\n\n sys util \n\n')
 
-        adapt_state.system_possible_configurations = self.make_configurations(request.adaptation_options, request.lifecycle_transitions)
+        adapt_state.system_possible_configurations = self.make_configurations(request.adaptation_options)
 
         self.get_logger().info(str(adapt_state.system_possible_configurations))
         

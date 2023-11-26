@@ -191,7 +191,7 @@ class OnStartAdapt : public AdaptNode
     // FIRST case: check if the goal request has a timeout
     if( !response_received_ )
     {
-      std::cout << "no response received (yet)" << std::endl;
+      // std::cout << "no response received (yet)" << std::endl;
 
       auto const nodelay = std::chrono::milliseconds(0);
       auto const timeout = rclcpp::Duration::from_seconds( double(service_timeout_.count()) / 1000);
@@ -200,14 +200,14 @@ class OnStartAdapt : public AdaptNode
 
       if (ret != rclcpp::FutureReturnCode::SUCCESS)
       {
-        std::cout << "Not a success response (yet)" << std::endl;
+        // std::cout << "Not a success response (yet)" << std::endl;
 
         if( (node_->now() - time_request_sent_) > timeout )
         {
           throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly?"); 
         }
         else{
-          std::cout << "Not a success response (yet) returning running" << std::endl;
+          // std::cout << "Not a success response (yet) returning running" << std::endl;
 
           return NodeStatus::RUNNING;
         }
@@ -392,7 +392,7 @@ class OnRunningAdapt : public AdaptNode
           // FIRST case: check if the goal request has a timeout
       if(!response_received_ )
       {
-        std::cout << "no response received (yet)" << std::endl;
+        // std::cout << "no response received (yet)" << std::endl;
 
         auto const nodelay = std::chrono::milliseconds(0);
         auto const timeout = rclcpp::Duration::from_seconds( double(service_timeout_.count()) / 1000);
@@ -401,14 +401,14 @@ class OnRunningAdapt : public AdaptNode
 
         if (ret != rclcpp::FutureReturnCode::SUCCESS)
         {
-          std::cout << "Not a success response (yet)" << std::endl;
+          // std::cout << "Not a success response (yet)" << std::endl;
 
           if( (node_->now() - time_request_sent_) > timeout )
           {
             throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly?"); 
           }
           else{
-            std::cout << "Not a success response (yet) returning running" << std::endl;
+            // std::cout << "Not a success response (yet) returning running" << std::endl;
           }
         }
         else
@@ -589,7 +589,7 @@ class OnConditionAdapt : public AdaptNode
           // FIRST case: check if the goal request has a timeout
       if(!response_received_ )
       {
-        std::cout << "no response received (yet)" << std::endl;
+        // std::cout << "no response received (yet)" << std::endl;
 
         auto const nodelay = std::chrono::milliseconds(0);
         auto const timeout = rclcpp::Duration::from_seconds( double(service_timeout_.count()) / 1000);
@@ -598,14 +598,14 @@ class OnConditionAdapt : public AdaptNode
 
         if (ret != rclcpp::FutureReturnCode::SUCCESS)
         {
-          std::cout << "Not a success response (yet)" << std::endl;
+          // std::cout << "Not a success response (yet)" << std::endl;
 
           if( (node_->now() - time_request_sent_) > timeout )
           {
             throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly?"); 
           }
           else{
-            std::cout << "Not a success response (yet) returning running" << std::endl;
+            // std::cout << "Not a success response (yet) returning running" << std::endl;
           }
         }
         else
@@ -790,31 +790,52 @@ class AdaptThrusterRecovery : public OnConditionAdapt
     }
 
     virtual bool evaluate_condition() override
-    { 
-      for (auto const & status_portname : thruster_stati)
+    {
+      int recovery_count = 0; 
+      for(unsigned int i = 0; i < thruster_stati.size(); i++)
       {
+        auto status_portname = thruster_stati[i];
+
+      
         rebet::SystemAttributeValue thruster_status_att; 
         auto res = getInput(status_portname, thruster_status_att);
 
         if(res)
         {
-          diagnostic_msgs::msg::KeyValue keyvalue_msg = thruster_status_att.get<rebet::SystemAttributeType::ATTRIBUTE_DIAG>();
-          
-          if(keyvalue_msg.value == "FALSE")
+          auto as_sysatt_msg = thruster_status_att.to_value_msg();
+          if(as_sysatt_msg.header.stamp != thruster_stati_timestamps[i])
           {
-            _transitions = {};
-            lifecycle_msgs::msg::Transition transition;
-            transition.id = 3; //Activate transition
-            _transitions.push_back(transition);
-            return true; //Condition met!
-          }
-          else if(keyvalue_msg.value == "RECOVERED")
-          {
-            _transitions = {};
-            lifecycle_msgs::msg::Transition transition;
-            transition.id = 4; //Deactivate transition
-            _transitions.push_back(transition);
-            return true; //Condition met!
+            thruster_stati_timestamps[i] = as_sysatt_msg.header.stamp;
+            diagnostic_msgs::msg::KeyValue keyvalue_msg = thruster_status_att.get<rebet::SystemAttributeType::ATTRIBUTE_DIAG>();
+            
+            if(keyvalue_msg.value == "FALSE")
+            {
+              std::cout << "\n\n\n\n\n\nCondition MET Because of failure!!\n\n\n\n\n" << std::endl;
+
+              _transitions = {};
+              lifecycle_msgs::msg::Transition transition;
+              transition.id = 3; //Activate transition
+              _transitions.push_back(transition);
+              return true; //Condition met!
+            }
+            else if(keyvalue_msg.value == "RECOVERED")
+            {
+              //The way SUAVE works is that it recovers all thrusters no matter how many broke, so this condition is only met when for each thruster I hear recovered once.
+              recovery_count++;
+              std::cout << "recovery count " << recovery_count;
+              if(recovery_count == 5)
+              {
+                recovery_count = 0;
+                std::cout << "\n\n\n\n\n\nCondition MET Because of recovered!!\n\n\n\n\n" << std::endl;
+
+              _transitions = {};
+              lifecycle_msgs::msg::Transition transition;
+              transition.id = 4; //Deactivate transition
+              _transitions.push_back(transition);
+              
+              return true; //Condition met!
+              }
+            }
           }
         }
 
@@ -830,6 +851,9 @@ class AdaptThrusterRecovery : public OnConditionAdapt
       static constexpr const char* STATUS_SIX = "thruster_status_six";
 
       std::vector<std::string> thruster_stati = {STATUS_ONE, STATUS_TWO, STATUS_THREE, STATUS_FOUR, STATUS_FIVE, STATUS_SIX};
+      std::vector<builtin_interfaces::msg::Time> thruster_stati_timestamps = {builtin_interfaces::msg::Time(), builtin_interfaces::msg::Time(), builtin_interfaces::msg::Time(), builtin_interfaces::msg::Time(), builtin_interfaces::msg::Time(), builtin_interfaces::msg::Time()};
+
+
 };
 
 }   // namespace BT

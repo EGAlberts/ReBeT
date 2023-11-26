@@ -36,6 +36,7 @@
 #include "rebet/qr_node.h"
 #include "rebet/adapt_node.h"
 #include "rebet/spiral_search.h"
+#include "rebet/follow_pipeline.h"
 #include "rebet/arm_motors.h"
 #include "rebet/set_mavros_mode.h"
 #include "rebet/confirm_mavros_status.h"
@@ -114,6 +115,7 @@ public:
       registerActionClient<IdentifyObjectAction>(factory, "bt_identifyobject_client", "checkForObjectsActionName", "identifyObject");
       
       registerActionClient<SpiralSearch>(factory, "bt_spiral_client", "spiral", "SpiralSearch");
+      registerActionClient<FollowPipeline>(factory, "bt_follow_client", "follow", "FollowPipeline");
       
 
       registerTopicClient<ConfirmMavrosStatus>(factory, "bt_mavros_status_sub", "ConfirmMavrosState");

@@ -70,7 +70,7 @@ class SystemReflection(Node):
         #self.linear_speed = np.hypot(msg.twist.twist.linear.x, msg.twist.twist.linear.y)
         self.diag_counter+=1
 
-        if(self.counter % 100 == 0): self.get_logger().info('100th Diagnostics Msg Received!!')
+        if(self.counter % 10000 == 0): self.get_logger().info('10000th Diagnostics Msg Received!!')
         if self.counter > 200000: self.counter = 0
 
         for diag_status in msg.status:

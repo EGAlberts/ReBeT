@@ -13,9 +13,11 @@ find_package(ament_cmake REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 find_package(rcl_interfaces REQUIRED)
+
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -43,7 +45,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SystemAttributeType.msg"
   "msg/SystemAttribute.msg"
 
-  DEPENDENCIES builtin_interfaces geometry_msgs nav_msgs rcl_interfaces diagnostic_msgs lifecycle_msgs
+  DEPENDENCIES builtin_interfaces geometry_msgs nav_msgs rcl_interfaces diagnostic_msgs lifecycle_msgs sensor_msgs
 )
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

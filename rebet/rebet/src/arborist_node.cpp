@@ -93,7 +93,7 @@ public:
       _set_blackboard = this->create_service<SetBlackboard>("set_blackboard", std::bind(&Arborist::handle_set_bb, this, _1, _2));
       _get_blackboard = this->create_service<GetBlackboard>("get_blackboard", std::bind(&Arborist::handle_get_bb, this, _1, _2));
       _get_qr = this->create_service<GetQR>("get_qr", std::bind(&Arborist::handle_get_qr, this, _1, _2));
-      _get_var_param = this->create_service<GetVParams>("get_variable_params", std::bind(&Arborist::handle_get_var_params, this, _1, _2));
+      // _get_var_param = this->create_service<GetVParams>("get_variable_params", std::bind(&Arborist::handle_get_var_params, this, _1, _2));
       _set_weights = this->create_service<SetWeights>("set_weights", std::bind(&Arborist::handle_set_weights, this, _1, _2));
 
       // may throw ament_index_cpp::PackageNotFoundError exception
@@ -400,32 +400,32 @@ private:
 
   }
 
-  std::vector<TreeNode::Ptr> get_tree_variable_acs()
-  {    
-    std::cout << "2 Service to get a variable nodes from the blackboard" << std::endl;
+  // std::vector<TreeNode::Ptr> get_tree_variable_acs()
+  // {    
+  //   std::cout << "2 Service to get a variable nodes from the blackboard" << std::endl;
 
-    std::vector<TreeNode::Ptr> variable_decorator_nodes;
+  //   std::vector<TreeNode::Ptr> variable_decorator_nodes;
 
-    for (auto const & sbtree : tree.subtrees) 
-    {
-      for (auto & node : sbtree->nodes) 
-      {
-        auto node_config = node->config();
+  //   for (auto const & sbtree : tree.subtrees) 
+  //   {
+  //     for (auto & node : sbtree->nodes) 
+  //     {
+  //       auto node_config = node->config();
 
-        if(node->type() == NodeType::DECORATOR && (node_config.output_ports.find(AdaptNode::VARIABLE_PARAMS) != node_config.output_ports.end()))
-        {
-          variable_decorator_nodes.push_back(node);
-        }
-        // if(auto var_ac_node = dynamic_cast<ActionNodeBase*>(static_cast<TreeNode*>(node.get())))
-        // {
-        //   variable_action_nodes.push_back(var_ac_node);
-        // }
-      }
-    }
-    std::cout << "2 End Service to get a variable nodes from the blackboard " << variable_decorator_nodes.size() << std::endl;
+  //       if(node->type() == NodeType::DECORATOR && (node_config.output_ports.find(AdaptNode::VARIABLE_PARAMS) != node_config.output_ports.end()))
+  //       {
+  //         variable_decorator_nodes.push_back(node);
+  //       }
+  //       // if(auto var_ac_node = dynamic_cast<ActionNodeBase*>(static_cast<TreeNode*>(node.get())))
+  //       // {
+  //       //   variable_action_nodes.push_back(var_ac_node);
+  //       // }
+  //     }
+  //   }
+  //   std::cout << "2 End Service to get a variable nodes from the blackboard " << variable_decorator_nodes.size() << std::endl;
 
-    return variable_decorator_nodes;
-  }
+  //   return variable_decorator_nodes;
+  // }
   
   void handle_get_qr(const std::shared_ptr<GetQR::Request> request,
         std::shared_ptr<GetQR::Response> response)
@@ -465,41 +465,41 @@ private:
 
   }
 
-  void handle_get_var_params(const std::shared_ptr<GetVParams::Request> request,
-        std::shared_ptr<GetVParams::Response> response)
-  {
-    std::cout << "1 Service to get a variable nodes from the blackboard" << std::endl;
+  // void handle_get_var_params(const std::shared_ptr<GetVParams::Request> request,
+  //       std::shared_ptr<GetVParams::Response> response)
+  // {
+  //   std::cout << "1 Service to get a variable nodes from the blackboard" << std::endl;
   
-    auto var_nodes = get_tree_variable_acs();
-    for (auto & node : var_nodes) 
-    {
-      if(node->status() == NodeStatus::RUNNING) //ensures that the actions are currently in effect.
-      {
-      auto node_config = node->config();
+  //   auto var_nodes = get_tree_variable_acs();
+  //   for (auto & node : var_nodes) 
+  //   {
+  //     if(node->status() == NodeStatus::RUNNING) //ensures that the actions are currently in effect.
+  //     {
+  //     auto node_config = node->config();
 
-      auto var_params = node_config.output_ports.find(VariableActionNodeBase::VARIABLE_PARAMS); //this is safe because the previous method guarantees the presence of this port.
+  //     auto var_params = node_config.output_ports.find(VariableActionNodeBase::VARIABLE_PARAMS); //this is safe because the previous method guarantees the presence of this port.
 
-      // if (var_params == node_config.output_ports.end())
-      // {
-      //   std::stringstream ss;
-      //   ss << "Output port " << VariableActionNode<ActionT>::VARIABLE_PARAMS << " not found within the variable action node " << node->registrationName();
-      //   RCLCPP_ERROR(this->get_logger(), ss.str().c_str());
-      //   return;
-      // }
+  //     // if (var_params == node_config.output_ports.end())
+  //     // {
+  //     //   std::stringstream ss;
+  //     //   ss << "Output port " << VariableActionNode<ActionT>::VARIABLE_PARAMS << " not found within the variable action node " << node->registrationName();
+  //     //   RCLCPP_ERROR(this->get_logger(), ss.str().c_str());
+  //     //   return;
+  //     // }
 
-      auto var_bb_value = tree.rootBlackboard()->get<VariableParameters>((std::string)TreeNode::stripBlackboardPointer(var_params->second));
-      //Each variable action node can provide one or more changeable parameters.
+  //     auto var_bb_value = tree.rootBlackboard()->get<VariableParameters>((std::string)TreeNode::stripBlackboardPointer(var_params->second));
+  //     //Each variable action node can provide one or more changeable parameters.
 
-      for (auto var_param : var_bb_value.variable_parameters)
-      {
-        response->variables_in_tree.variable_parameters.push_back(var_param); //We put all of these parameters that may change into a singular list. 
-        //Potentially we may want a list of these lists to keep them distinct.. 
-      }
-      }
-    }
-      std::cout << "1 End Service to get a variable nodes from the blackboard " << response->variables_in_tree.variable_parameters.size() << std::endl;
+  //     for (auto var_param : var_bb_value.variable_parameters)
+  //     {
+  //       response->variables_in_tree.variable_parameters.push_back(var_param); //We put all of these parameters that may change into a singular list. 
+  //       //Potentially we may want a list of these lists to keep them distinct.. 
+  //     }
+  //     }
+  //   }
+  //     std::cout << "1 End Service to get a variable nodes from the blackboard " << response->variables_in_tree.variable_parameters.size() << std::endl;
 
-  }
+  // }
   
 
   
@@ -692,7 +692,7 @@ private:
   rclcpp::Service<SetBlackboard>::SharedPtr _set_blackboard;
   rclcpp::Service<GetBlackboard>::SharedPtr _get_blackboard;
   rclcpp::Service<GetQR>::SharedPtr _get_qr;
-  rclcpp::Service<GetVParams>::SharedPtr _get_var_param;
+  // rclcpp::Service<GetVParams>::SharedPtr _get_var_param;
   rclcpp::Service<SetWeights>::SharedPtr _set_weights;
   rclcpp::Service<SetAttributesInBlackboard>::SharedPtr _set_att_in_blackboard;
   rclcpp::Service<SetParameterInBlackboard>::SharedPtr _set_param_in_blackboard;

@@ -18,6 +18,7 @@ import time
 import threading
 from nav_msgs.msg import Odometry
 from diagnostic_msgs.msg import DiagnosticArray
+from sensor_msgs.msg import LaserScan
 from diagnostic_msgs.msg import KeyValue
 import numpy as np
 
@@ -36,11 +37,14 @@ class SystemReflection(Node):
 
         self.cli = self.create_client(SetAttributesInBlackboard, '/set_attributes_in_blackboard', callback_group=exclusive_group)
         self.subscription = self.create_subscription(BatteryState,'/battery/status',self.battery_state_cb,10, callback_group=sub_group)
+
         self.diagnostic_subscription = self.create_subscription(DiagnosticArray,'/diagnostics',self.sv_diag_cb,1,callback_group=MutuallyExclusiveCallbackGroup())
+        self.laserscan_subscription = self.create_subscription(LaserScan,'/scan',self.ls_scan_cb,1,callback_group=MutuallyExclusiveCallbackGroup())
         self.odometry_subscription = self.create_subscription(Odometry,'/odom',self.tb_odom_cb,10, callback_group = MutuallyExclusiveCallbackGroup())
         
         self.req = SetAttributesInBlackboard.Request()
         self.odom_msg = None
+        self.laser_msg = None
         self.diagnostic_values = queue.Queue() #queue of diagnostic KeyValue
         self.time_monitor_timer = self.create_timer(2, self.do_stuff, callback_group=timer_cb_group)
         self.battery_state = None
@@ -58,7 +62,12 @@ class SystemReflection(Node):
             #     self.get_logger().info("Waiting for future to complete")
             # return self.future.result()
         
-     
+    def ls_scan_cb(self,msg):
+        self.laser_msg = msg
+        self.counter+=1
+        if(self.counter % 1000 == 0): self.get_logger().info('1000th Laser Msg Received!!')
+        if self.counter > 200000: self.counter = 0
+
     def tb_odom_cb(self,msg):
         self.odom_msg = msg
         #self.linear_speed = np.hypot(msg.twist.twist.linear.x, msg.twist.twist.linear.y)
@@ -108,6 +117,18 @@ class SystemReflection(Node):
             att_value.header.stamp = self.get_clock().now().to_msg()
             att_value.type = 1 #odometry type
             att_value.odom_value = self.odom_msg
+            new_sys_att.value = att_value 
+            self.req.sys_attributes.append(new_sys_att)
+
+
+        if(self.laser_msg is not None):
+            new_sys_att = SystemAttribute()
+            new_sys_att.name = 'laser_scan'
+
+            att_value = SystemAttributeValue()
+            att_value.header.stamp = self.get_clock().now().to_msg()
+            att_value.type = 3 #laserscan type
+            att_value.odom_value = self.laser_msg
             new_sys_att.value = att_value 
             self.req.sys_attributes.append(new_sys_att)
 

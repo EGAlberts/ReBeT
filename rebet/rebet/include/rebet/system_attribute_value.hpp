@@ -13,6 +13,7 @@
 
 #include "nav_msgs/msg/odometry.hpp"
 #include "diagnostic_msgs/msg/key_value.hpp"
+#include "sensor_msgs/msg/laser_scan  .hpp"
 
 
 //Inspired by rclcpp/parameter_value.hpp
@@ -25,6 +26,8 @@ enum SystemAttributeType : uint8_t
   ATTRIBUTE_NOT_SET = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_NOT_SET,
   ATTRIBUTE_ODOM    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_ODOM,
   ATTRIBUTE_DIAG    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_DIAG,
+  ATTRIBUTE_LASER    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_LASER,
+
 
 };
 
@@ -62,6 +65,9 @@ public:
   explicit SystemAttributeValue(const nav_msgs::msg::Odometry odom_value);
 
   explicit SystemAttributeValue(const diagnostic_msgs::msg::KeyValue diag_value);
+
+  explicit SystemAttributeValue(const sensor_msgs::msg::LaserScan laser_value);
+
 
 
   /// Return an enum indicating the type of the set value.
@@ -106,6 +112,17 @@ public:
       throw SystemAttributeTypeException(SystemAttributeType::ATTRIBUTE_DIAG, get_type());
     }
     return value_.diag_value;
+  }
+
+  template<SystemAttributeType type>
+  constexpr
+  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_LASER, const sensor_msgs::msg::LaserScan &>::type
+  get() const
+  {
+    if (value_.type != rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_LASER) {
+      throw SystemAttributeTypeException(SystemAttributeType::ATTRIBUTE_LASER, get_type());
+    }
+    return value_.laser_value;
   }
 
   

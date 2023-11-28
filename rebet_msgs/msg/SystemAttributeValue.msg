@@ -21,4 +21,6 @@ uint8 type
 
 nav_msgs/Odometry odom_value
 
+sensor_msgs/LaserScan scan_value
+
 diagnostic_msgs/KeyValue diag_value

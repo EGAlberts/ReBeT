@@ -10,11 +10,15 @@
 					<Repeat num_cycles="3">
 						<Repeat num_cycles="{num_obstacles}">
 							<Sequence>
+							<SafetyQR>
+							<AdaptMaxSpeed adaptation_options="0.08;0.16;0.26" adaptation_strategy="ucb_strategy" adaptation_subject="max_velocity" subject_location="velocity_smoother">
 								<RetryUntilSuccessful num_attempts="-1">
 										<visitObs poses="{route_poses}"/>
 								</RetryUntilSuccessful>
+							</AdaptMaxSpeed>
+							</SafetyQR>
 								<TaskEfficiencyQR weight="{task_weight}" objs_identified="{objects_detected}" metric="{task_metric}" mean_metric="{task_mean_metric}" >
-								<AdaptPictureRate variable_parameters="{id_var_params}" adaptation_strategy="ucb_strategy">
+								<AdaptPictureRate adaptation_options="1;5;7" adaptation_strategy="ucb_strategy" adaptation_subject="pic_rate" subject_location="n/a">
 									<Repeat num_cycles="{pic_rate}">
 										<Sequence>
 												<RetryUntilSuccessful num_attempts="-1">

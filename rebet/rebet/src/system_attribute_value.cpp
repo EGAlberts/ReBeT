@@ -16,6 +16,8 @@ rebet::to_string(const SystemAttributeType type)
       return "odometry msg";
     case SystemAttributeType::ATTRIBUTE_DIAG:
       return "diagnostic keyvalue msg";
+    case SystemAttributeType::ATTRIBUTE_LASER:
+      return "laserscan attribute msg";
     default:
       return "unknown type";
   }
@@ -61,6 +63,8 @@ rebet::to_string(const SystemAttributeValue & value)
         return "odom message inside :) ";
     case SystemAttributeType::ATTRIBUTE_DIAG:
         return "diagnostic keyvalue message inside :) ";
+      case SystemAttributeType::ATTRIBUTE_LASER:
+        return "laserscan message inside :) ";
     default:
       return "unknown type";
   }
@@ -77,6 +81,7 @@ SystemAttributeValue::SystemAttributeValue(const rebet_msgs::msg::SystemAttribut
   switch (value.type) {
     case ATTRIBUTE_ODOM:
     case ATTRIBUTE_DIAG:
+    case ATTRIBUTE_LASER:
     case ATTRIBUTE_NOT_SET:
       break;
     default:
@@ -94,6 +99,12 @@ SystemAttributeValue::SystemAttributeValue(const diagnostic_msgs::msg::KeyValue 
 {
   value_.diag_value = diag_value;
   value_.type = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_DIAG;
+}
+
+SystemAttributeValue::SystemAttributeValue(const sensor_msgs::msg::LaserScan laser_value)
+{
+  value_.laser_value = laser_value;
+  value_.type = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_LASER;
 }
 
 SystemAttributeType

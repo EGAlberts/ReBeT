@@ -18,7 +18,7 @@
 namespace BT
 {
 /**
- * @brief The QRNode is used to constrain variable action nodes it decorates.
+ * @brief The _ is used to _ the _ it decorates.
  *
  *
  * 
@@ -28,25 +28,42 @@ namespace BT
  * 
  * 
  * 
- * Note: If in the future a BT should be designed with multiple instances of the same QR, it would become impractical. Right now the only feasible case it having two QRs which are never active simultaneously. 
- * In all other cases it would require creating a new (very similar) subclass as the linked blackboard entries would otherwise cause issue.
+
  */
-class AdaptNode : public DecoratorNode
+
+
+class AdaptDecoratorBase {
+protected:
+    std::string adaptation_target_;
+    VariableParameters _var_params = VariableParameters();
+    std::vector<lifecycle_msgs::msg::Transition> _transitions = {};
+    static constexpr const char* ADAP_OPT = "adaptation_options";
+    static constexpr const char* ADAP_STRAT = "adaptation_strategy";
+    static constexpr const char* ADAP_SUB = "adaptation_subject";
+    static constexpr const char* ADAP_LOC = "subject_location";
+};
+
+template <class ParamT>
+class AdaptNode : public DecoratorNode, public virtual AdaptDecoratorBase
 {
 public:
 
-  static constexpr const char* VARIABLE_PARAMS = "variable_parameters";
-  static constexpr const char* ADAP_STRAT = "adaptation_strategy";
 
 
+
+
+  
   AdaptNode(const std::string& name, const NodeConfig& config) : DecoratorNode(name, config)
   {
   }
 
     static PortsList providedPorts()
     {
-        PortsList ports = {OutputPort<VariableParameters>(VARIABLE_PARAMS, "What can be changed at runtime about this action"),
-                           InputPort<std::string>(ADAP_STRAT, "Which strategy should be employed to decide on adaptations")
+        PortsList ports = {
+                           InputPort<std::string>(ADAP_STRAT, "Which strategy should be employed to decide on adaptations"),
+                           InputPort<std::string>(ADAP_SUB, "The name of the thing you adapt"),
+                           InputPort<std::string>(ADAP_LOC, "Where the thing you adapt is located"),
+                           InputPort<std::vector<ParamT>>(ADAP_OPT, "List of things to adapt with")
                           };
         return ports;
     }
@@ -69,68 +86,73 @@ private:
   bool read_parameter_from_ports_;
 
 
-  virtual NodeStatus tick() override
-  {
-    setStatus(NodeStatus::RUNNING);
-    const NodeStatus child_status = child_node_->executeTick();
+  // virtual NodeStatus tick() override
+  // {
+  //   setStatus(NodeStatus::RUNNING);
+  //   const NodeStatus child_status = child_node_->executeTick();
 
-    switch (child_status)
-    {
-      case NodeStatus::SUCCESS: {
-        resetChild();
-        return NodeStatus::SUCCESS;
-      }
+  //   switch (child_status)
+  //   {
+  //     case NodeStatus::SUCCESS: {
+  //       resetChild();
+  //       return NodeStatus::SUCCESS;
+  //     }
 
-      case NodeStatus::FAILURE: {
-        resetChild();
-        return NodeStatus::FAILURE;
-      }
+  //     case NodeStatus::FAILURE: {
+  //       resetChild();
+  //       return NodeStatus::FAILURE;
+  //     }
 
-      case NodeStatus::RUNNING: {
-        return NodeStatus::RUNNING;
-      }
+  //     case NodeStatus::RUNNING: {
+  //       return NodeStatus::RUNNING;
+  //     }
 
-      case NodeStatus::SKIPPED: {
-        return NodeStatus::SKIPPED;
-      }
-      case NodeStatus::IDLE: {
-        throw LogicError("[", name(), "]: A child should not return IDLE");
-      }
-    }
-    return status();
+  //     case NodeStatus::SKIPPED: {
+  //       return NodeStatus::SKIPPED;
+  //     }
+  //     case NodeStatus::IDLE: {
+  //       throw LogicError("[", name(), "]: A child should not return IDLE");
+  //     }
+  //   }
+  //   return status();
 
-  }
+  // }
 
   //void halt() override;
 
   protected:
 
-    template <class T>
-    void registerAdaptations(std::vector<T> param_values, std::string param_name, std::string server_name)
+    void registerAdaptations()
     {
+        std::vector<ParamT> param_values;
+        std::string param_name;
+        std::string node_name;
+        getInput(ADAP_OPT, param_values);
+        getInput(ADAP_SUB, param_name);
+        getInput(ADAP_LOC, node_name);
+
         rebet_msgs::msg::VariableParameter variable_param = rebet_msgs::msg::VariableParameter();
 
         variable_param.name = param_name;
-        variable_param.node_name = server_name;
-        for (T val : param_values) {
+        variable_param.node_name = node_name;
+        for (ParamT val : param_values) {
             rclcpp::ParameterValue par_val = rclcpp::ParameterValue(val);
             variable_param.possible_values.push_back(par_val.to_value_msg());
         }
         _var_params.variable_parameters.push_back(variable_param); //vector of VariableParameter   
     }
 
-    std::string adaptation_target_;
 
-    VariableParameters _var_params = VariableParameters();
-    std::vector<lifecycle_msgs::msg::Transition> _transitions = {};
+
 
 
 };
 
-class OnStartAdapt : public AdaptNode
+template <class ParamT>
+class OnStartAdapt : public AdaptNode<ParamT>, public virtual AdaptDecoratorBase
 {
   public:
-    OnStartAdapt(const std::string& name, const NodeConfig& config, const std::string& adaptation_target) : AdaptNode(name, config)
+    OnStartAdapt(const std::string& name, const NodeConfig& config, const std::string& adaptation_target) : AdaptNode<ParamT>(name, config)
     { 
       std::cout << "\n\n\n\nSomeone created me a OnStartAdapt node!!!!\n\n\n\n\n" << std::endl;
       node_ = rclcpp::Node::make_shared("adapt_rq_client");
@@ -141,7 +163,7 @@ class OnStartAdapt : public AdaptNode
 
     static PortsList providedPorts()
     {
-      PortsList base_ports = AdaptNode::providedPorts();
+      PortsList base_ports = AdaptNode<ParamT>::providedPorts();
 
       PortsList child_ports =  {
               };
@@ -153,13 +175,13 @@ class OnStartAdapt : public AdaptNode
   virtual NodeStatus tick() override
   {
   //Shamelessly taken from bt_service_node :) 
-  if(status() == NodeStatus::IDLE )
+  if(this->status() == NodeStatus::IDLE )
   {
       callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
       callback_group_executor_.add_callback_group(callback_group_, node_->get_node_base_interface());
       adapt_client_ = node_->create_client<rebet_msgs::srv::RequestAdaptation>("/request_adaptation", rmw_qos_profile_services_default, callback_group_);
 
-      setStatus(NodeStatus::RUNNING);
+      this->setStatus(NodeStatus::RUNNING);
 
       response_received_ = false;
       future_response_ = {};
@@ -167,11 +189,11 @@ class OnStartAdapt : public AdaptNode
       response_ = {};
 
       std::string strategy_name;
-      getInput(ADAP_STRAT,strategy_name);
+      this->getInput(ADAP_STRAT,strategy_name);
       auto request = std::make_shared<rebet_msgs::srv::RequestAdaptation::Request>();
 
       request->adaptation_options = _var_params;
-      request->task_identifier = registrationName();
+      request->task_identifier = this->registrationName();
       request->adaptation_strategy = strategy_name;
       request->adaptation_target = adaptation_target_;
       request->lifecycle_transitions = _transitions;
@@ -182,7 +204,7 @@ class OnStartAdapt : public AdaptNode
 
       return NodeStatus::RUNNING;
   }
-  if (status() == NodeStatus::RUNNING)
+  if (this->status() == NodeStatus::RUNNING)
   { 
     
     //std::cout << "Made it into running" << std::endl;
@@ -233,7 +255,7 @@ class OnStartAdapt : public AdaptNode
     {
       //Response received
       //std::cout << "Outside of IDLE within adapt dec node" << std::endl;
-      const NodeStatus child_status = child_node_->executeTick();
+      const NodeStatus child_status = this->child_node_->executeTick();
 
       //std::cout << "ticked child in adapt dec" << std::endl;
 
@@ -242,13 +264,13 @@ class OnStartAdapt : public AdaptNode
       switch (child_status)
       {
         case NodeStatus::SUCCESS: {
-          resetChild();
+          this->resetChild();
           std::cout << "success child in adapt dec" << std::endl;
           return NodeStatus::SUCCESS;
         }
 
         case NodeStatus::FAILURE: {
-          resetChild();
+          this->resetChild();
           std::cout << "failure child in adapt dec" << std::endl;
 
           return NodeStatus::FAILURE;
@@ -265,11 +287,11 @@ class OnStartAdapt : public AdaptNode
           return NodeStatus::SKIPPED;
         }
         case NodeStatus::IDLE: {
-          throw LogicError("[", name(), "]: A child should not return IDLE");
+          throw LogicError("[", this->name(), "]: A child should not return IDLE");
         }
       }
       //I don't know when this would happen but OK
-      return status();
+      return this->status();
 
     }
 
@@ -309,11 +331,12 @@ class OnStartAdapt : public AdaptNode
 
 };
 
-class OnRunningAdapt : public AdaptNode
+template <class ParamT>
+class OnRunningAdapt : public AdaptNode<ParamT>, public virtual AdaptDecoratorBase
 {
   static constexpr const char* WINDOW_LEN = "adaptation_period";
   public:
-    OnRunningAdapt(const std::string& name, const NodeConfig& config, const std::string& adaptation_target) : AdaptNode(name, config)
+    OnRunningAdapt(const std::string& name, const NodeConfig& config, const std::string& adaptation_target) : AdaptNode<ParamT>(name, config)
     { 
       std::cout << "\n\n\n\nSomeone created me a OnRunningAdapt node!!!!\n\n\n\n\n" << std::endl;
       node_ = rclcpp::Node::make_shared("adapt_rq_client");
@@ -323,7 +346,7 @@ class OnRunningAdapt : public AdaptNode
 
     static PortsList providedPorts()
     {
-      PortsList base_ports = AdaptNode::providedPorts();
+      PortsList base_ports = AdaptNode<ParamT>::providedPorts();
 
       PortsList child_ports =  {
         InputPort<int>(WINDOW_LEN, "The periodicity with which the adaptation should occur during running.")
@@ -336,27 +359,27 @@ class OnRunningAdapt : public AdaptNode
   virtual NodeStatus tick() override
   {
   //Shamelessly taken from bt_service_node :) 
-  if(status() == NodeStatus::IDLE )
+  if(this->status() == NodeStatus::IDLE )
   {
       callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
       callback_group_executor_.add_callback_group(callback_group_, node_->get_node_base_interface());
       adapt_client_ = node_->create_client<rebet_msgs::srv::RequestAdaptation>("/request_adaptation", rmw_qos_profile_services_default, callback_group_);
 
-      getInput(WINDOW_LEN,_window_length);
+      this->getInput(WINDOW_LEN,_window_length);
 
-      setStatus(NodeStatus::RUNNING);
+      this->setStatus(NodeStatus::RUNNING);
 
       response_received_ = false;
 
       return NodeStatus::RUNNING;
   }
-  if (status() == NodeStatus::RUNNING)
+  if (this->status() == NodeStatus::RUNNING)
   {
 
     auto curr_time_pointer = std::chrono::system_clock::now();
     int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
     int elapsed_seconds = current_time-_window_start;
-    const NodeStatus child_status = child_node_->executeTick();
+    const NodeStatus child_status = this->child_node_->executeTick();
 
 
     bool window_expired = elapsed_seconds >= _window_length;
@@ -367,13 +390,13 @@ class OnRunningAdapt : public AdaptNode
       std::cout << "window expired no request sent" << std::endl;
 
       std::string strategy_name;
-      getInput(ADAP_STRAT,strategy_name);
+      this->getInput(ADAP_STRAT,strategy_name);
       
       auto request = std::make_shared<rebet_msgs::srv::RequestAdaptation::Request>();
 
       future_response_ = {};
       request->adaptation_options = _var_params;
-      request->task_identifier = registrationName();
+      request->task_identifier = this->registrationName();
       request->adaptation_strategy = strategy_name;
       request->adaptation_target = adaptation_target_;
       request->lifecycle_transitions = _transitions;
@@ -442,13 +465,13 @@ class OnRunningAdapt : public AdaptNode
     switch (child_status)
     {
       case NodeStatus::SUCCESS: {
-        resetChild();
+        this->resetChild();
         std::cout << "success child in adapt dec" << std::endl;
         return NodeStatus::SUCCESS;
       }
 
       case NodeStatus::FAILURE: {
-        resetChild();
+        this->resetChild();
         std::cout << "failure child in adapt dec" << std::endl;
 
         return NodeStatus::FAILURE;
@@ -465,16 +488,16 @@ class OnRunningAdapt : public AdaptNode
         return NodeStatus::SKIPPED;
       }
       case NodeStatus::IDLE: {
-        throw LogicError("[", name(), "]: A child should not return IDLE");
+        throw LogicError("[", this->name(), "]: A child should not return IDLE");
       }
     }
     //I don't know when this would happen but OK
-    return status();
+    return this->status();
 
     
   }
   //I don't know when this would happen but OK
-  return status();
+  return this->status();
   }
 
 
@@ -509,10 +532,11 @@ class OnRunningAdapt : public AdaptNode
 };
 
 //It is not lost on me that right now adapt on running is just oncondition with a time window
-class OnConditionAdapt : public AdaptNode
+template <class ParamT>
+class OnConditionAdapt : public AdaptNode<ParamT>, public virtual AdaptDecoratorBase
 {
   public:
-    OnConditionAdapt(const std::string& name, const NodeConfig& config, const std::string& adaptation_target) : AdaptNode(name, config)
+    OnConditionAdapt(const std::string& name, const NodeConfig& config, const std::string& adaptation_target) : AdaptNode<ParamT>(name, config)
     { 
       std::cout << "\n\n\n\nSomeone created me a OnEventAdapt node!!!!\n\n\n\n\n" << std::endl;
       node_ = rclcpp::Node::make_shared("adapt_rq_client");
@@ -521,7 +545,7 @@ class OnConditionAdapt : public AdaptNode
     }
     static PortsList providedPorts()
     {
-      PortsList base_ports = AdaptNode::providedPorts();
+      PortsList base_ports = AdaptNode<ParamT>::providedPorts();
 
       PortsList child_ports =  {
               };
@@ -539,21 +563,21 @@ class OnConditionAdapt : public AdaptNode
   virtual NodeStatus tick() override
   {
   //Shamelessly taken from bt_service_node :) 
-  if(status() == NodeStatus::IDLE )
+  if(this->status() == NodeStatus::IDLE )
   {
       callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
       callback_group_executor_.add_callback_group(callback_group_, node_->get_node_base_interface());
       adapt_client_ = node_->create_client<rebet_msgs::srv::RequestAdaptation>("/request_adaptation", rmw_qos_profile_services_default, callback_group_);
 
-      setStatus(NodeStatus::RUNNING);
+      this->setStatus(NodeStatus::RUNNING);
 
       response_received_ = false;
 
       return NodeStatus::RUNNING;
   }
-  if (status() == NodeStatus::RUNNING)
+  if (this->status() == NodeStatus::RUNNING)
   {
-    const NodeStatus child_status = child_node_->executeTick();
+    const NodeStatus child_status = this->child_node_->executeTick();
 
     if(!_to_adapt) //I only want to evaluate the again condition after a trigger is processed.
     {
@@ -564,13 +588,13 @@ class OnConditionAdapt : public AdaptNode
       std::cout << "condition met but no request sent" << std::endl;
 
       std::string strategy_name;
-      getInput(ADAP_STRAT,strategy_name);
+      this->getInput(ADAP_STRAT,strategy_name);
       
       auto request = std::make_shared<rebet_msgs::srv::RequestAdaptation::Request>();
 
       future_response_ = {};
       request->adaptation_options = _var_params;
-      request->task_identifier = registrationName();
+      request->task_identifier = this->registrationName();
       request->adaptation_strategy = strategy_name;
       request->adaptation_target = adaptation_target_;
       request->lifecycle_transitions = _transitions;
@@ -638,13 +662,13 @@ class OnConditionAdapt : public AdaptNode
     switch (child_status)
     {
       case NodeStatus::SUCCESS: {
-        resetChild();
+        this->resetChild();
         std::cout << "success child in adapt dec" << std::endl;
         return NodeStatus::SUCCESS;
       }
 
       case NodeStatus::FAILURE: {
-        resetChild();
+        this->resetChild();
         std::cout << "failure child in adapt dec" << std::endl;
 
         return NodeStatus::FAILURE;
@@ -661,16 +685,16 @@ class OnConditionAdapt : public AdaptNode
         return NodeStatus::SKIPPED;
       }
       case NodeStatus::IDLE: {
-        throw LogicError("[", name(), "]: A child should not return IDLE");
+        throw LogicError("[", this->name(), "]: A child should not return IDLE");
       }
     }
     //I don't know when this would happen but OK
-    return status();
+    return this->status();
 
     
   }
   //I don't know when this would happen but OK
-  return status();
+  return this->status();
   }
 
     private:
@@ -693,21 +717,15 @@ class OnConditionAdapt : public AdaptNode
 
 };
 
-class AdaptPictureRate : public OnStartAdapt
+class AdaptPictureRate : public OnStartAdapt<int>
 {
   public:
 
-    const std::string PICTURE_RT_PARAM = "pic_rate";
-    const std::string ACTION_SRVR = "identify_action_server"; //now unnecessary, should be removed..
-
-    AdaptPictureRate(const std::string& name, const NodeConfig& config) : OnStartAdapt(name, config, "blackboard")
+    AdaptPictureRate(const std::string& name, const NodeConfig& config) : OnStartAdapt<int>(name, config, "blackboard")
     {
-      std::vector<int> pc_rate_values{1, 3, 5, 7};
-      registerAdaptations<int>(pc_rate_values, PICTURE_RT_PARAM, ACTION_SRVR);
+      registerAdaptations();
 
-      //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.
-      setOutput(VARIABLE_PARAMS, _var_params); 
-  
+      //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.  
     }
 
     static PortsList providedPorts()
@@ -724,20 +742,16 @@ class AdaptPictureRate : public OnStartAdapt
 
 };
 
-class AdaptSpiralAltitude : public OnRunningAdapt
+class AdaptSpiralAltitude : public OnRunningAdapt<double>
 {
   public:
 
-    const std::string ALTITUDE_PARAM = "spiral_altitude";
-    const std::string ACTION_SRVR = "f_generate_search_path_node";
-
-    AdaptSpiralAltitude(const std::string& name, const NodeConfig& config) : OnRunningAdapt(name, config, "ros_node")
+    AdaptSpiralAltitude(const std::string& name, const NodeConfig& config) : OnRunningAdapt<double>(name, config, "ros_node")
     {
-      std::vector<double> altitude_values{1.0, 2.0, 3.0};
-      registerAdaptations<double>(altitude_values, ALTITUDE_PARAM, ACTION_SRVR);
+      // std::vector<double> altitude_values{1.0, 2.0, 3.0};
+      registerAdaptations();
 
       //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.
-      setOutput(VARIABLE_PARAMS, _var_params); 
   
     }
 
@@ -755,18 +769,16 @@ class AdaptSpiralAltitude : public OnRunningAdapt
 
 };
 
-class AdaptThrusterRecovery : public OnConditionAdapt
+class AdaptThrusterRecovery : public OnConditionAdapt<double>
 {
+
   public:
-
-    const std::string LIFECYCLE_NODE = "f_maintain_motion_node";
-
-    AdaptThrusterRecovery(const std::string& name, const NodeConfig& config) : OnConditionAdapt(name, config, "ros_lifecycle")
+    AdaptThrusterRecovery(const std::string& name, const NodeConfig& config) : OnConditionAdapt<double>(name, config, "ros_lifecycle")
     {
-      registerAdaptations<double>({}, "", LIFECYCLE_NODE);
+      registerAdaptations();
 
       //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.
-      setOutput(VARIABLE_PARAMS, _var_params); 
+      // setOutput(VARIABLE_PARAMS, _var_params); 
 
 
   
@@ -774,7 +786,7 @@ class AdaptThrusterRecovery : public OnConditionAdapt
 
     static PortsList providedPorts()
     {
-      PortsList base_ports = OnRunningAdapt::providedPorts();
+      PortsList base_ports = OnConditionAdapt::providedPorts();
 
       PortsList child_ports =  {
         InputPort<rebet::SystemAttributeValue>(STATUS_ONE, "status of thruster"),
@@ -815,7 +827,7 @@ class AdaptThrusterRecovery : public OnConditionAdapt
               _transitions = {};
               lifecycle_msgs::msg::Transition transition;
               transition.id = 3; //Activate transition
-              _transitions.push_back(transition);
+              this->_transitions.push_back(transition);
               return true; //Condition met!
             }
             else if(keyvalue_msg.value == "RECOVERED")
@@ -828,10 +840,10 @@ class AdaptThrusterRecovery : public OnConditionAdapt
                 recovery_count = 0;
                 std::cout << "\n\n\n\n\n\nCondition MET Because of recovered!!\n\n\n\n\n" << std::endl;
 
-              _transitions = {};
+              this->_transitions = {};
               lifecycle_msgs::msg::Transition transition;
               transition.id = 4; //Deactivate transition
-              _transitions.push_back(transition);
+              this->_transitions.push_back(transition);
               
               return true; //Condition met!
               }

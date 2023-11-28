@@ -17,6 +17,8 @@
   <depend>builtin_interfaces</depend>
   <depend>rcl_interfaces</depend>
   <depend>lifecycle_msgs</depend>
+  <depend>sensor_msgs</depend>
+
  
   
 

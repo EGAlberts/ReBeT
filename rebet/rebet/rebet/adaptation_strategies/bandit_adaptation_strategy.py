@@ -131,7 +131,7 @@ class BanditStrategy(AdaptationStrategy):
 
     def make_hashable(self):
         for config_msg in self.possible_configs:
-            string_repr = " ".join([str((param.name, param.value)) for param in config_msg.configuration_parameters] + config_msg.node_names)
+            string_repr = " ".join([str((param.name, param.value)) for param in config_msg.configuration_parameters] + config_msg.node_names + [str(adap_type) for adap_type in config_msg.adaptation_target_types])
             if string_repr not in self.configuration_dict:
                 self.configuration_dict[string_repr] = config_msg
         

@@ -7,15 +7,9 @@
 
 #include "behaviortree_ros2/bt_action_node.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "rebet_msgs/action/identify.hpp"
-#include "rebet_msgs/msg/variable_parameter.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
-
-#include "rebet_msgs/msg/objects_identified.hpp"
-#include "nav_msgs/srv/get_map.hpp"
-#include "rebet/variable_action_node.h"
-#include "rclcpp/parameter_value.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
+
 using namespace BT;
 
 
@@ -27,11 +21,9 @@ using PoseStamped = geometry_msgs::msg::PoseStamped;
 
 
 
-class VisitObstacleAction: public VariableActionNode<NavigateToPose>
+class VisitObstacleAction: public RosActionNode<NavigateToPose>
 {
 public:  
-  const std::string PICTURE_RT_PARAM = "pic_rate";
-  const std::string ACTION_SRVR = "identify_action_server"; //TODO: update
 
   //Name for the pose input port
   static constexpr const char* POSES = "poses";
@@ -39,20 +31,11 @@ public:
   VisitObstacleAction(const std::string& name,
                   const NodeConfig& conf,
                   const RosNodeParams& params)
-    : VariableActionNode<NavigateToPose>(name, conf, params)
+    : RosActionNode<NavigateToPose>(name, conf, params)
   {
     std::cout << "Someone made me (an VisitObstacle Action Nodee)" << std::endl;
     RCLCPP_INFO(node_->get_logger(), "name of the node");
     RCLCPP_INFO(node_->get_logger(), node_->get_name());
-
-
-    
-    // _var_params.server_name = ACTION_SRVR;
-
-    std::vector<int> pc_rate_values{1, 3, 5, 7};
-    registerAdaptations<int>(pc_rate_values, PICTURE_RT_PARAM, ACTION_SRVR);
-    
-    setOutput(VARIABLE_PARAMS, _var_params);
 
   }
 
@@ -61,11 +44,13 @@ public:
   // using RosActionNode::providedBasicPorts()
   static PortsList providedPorts()
   {
-    PortsList base_ports = VariableActionNode::providedPorts();
+    PortsList base_ports = RosActionNode::providedPorts();
 
     PortsList child_ports = { 
               InputPort<std::vector<PoseStamped>>(POSES),
               OutputPort<float>("out_time_elapsed"),
+              OutputPort<std::string>("name_of_task"),
+
             };
 
     child_ports.merge(base_ports);
@@ -75,8 +60,9 @@ public:
 
   // This is called when the TreeNode is ticked and it should
   // send the request to the action server
-  bool setGoal(VariableActionNode::Goal& goal) override 
+  bool setGoal(RosActionNode::Goal& goal) override 
   {
+    setOutput("name_of_task",registrationName());
     // #goal definition
     // geometry_msgs/PoseStamped pose
     // string behavior_tree

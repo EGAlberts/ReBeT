@@ -42,13 +42,13 @@ class CameraFeedNode : public RosTopicSubNode<Image>
         if(last_msg) {
             setOutput(IMG_OUT, *last_msg);
 
-            RCLCPP_INFO(node_->get_logger(), "SUCCESS IN CAM FEED");
+            // RCLCPP_INFO(node_->get_logger(), "SUCCESS IN CAM FEED");
 
             return BT::NodeStatus::SUCCESS;
             
 
         }
-        RCLCPP_INFO(node_->get_logger(), "FAILURE IN CAM FEED");
+        // RCLCPP_INFO(node_->get_logger(), "FAILURE IN CAM FEED");
 
         return BT::NodeStatus::FAILURE;
     }

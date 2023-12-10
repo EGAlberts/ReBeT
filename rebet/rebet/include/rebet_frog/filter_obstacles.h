@@ -9,7 +9,6 @@ using namespace BT;
 #include <vector>
 #include <algorithm>
 #include "nav_msgs/srv/get_map.hpp"
-#include "behaviortree_ros2/bt_service_node.hpp"
 #include <math.h>
 
 
@@ -75,43 +74,43 @@ std::vector<std::vector<std::vector<double>>> find_groups(std::vector<std::vecto
 
 
 
-class FilterObstacles : public RosServiceNode<nav_msgs::srv::GetMap>
+class FilterObstacles : public BT::SyncActionNode
 {
 public:
     static constexpr const char* OBS_POS = "obstacle_positions";
     static constexpr const char* OBS_NUM = "obstacle_number";
+    static constexpr const char* MAP_IN = "map_to_filter";
+
 
     FilterObstacles(const std::string & instance_name,
-                          const BT::NodeConfig& conf,
-                          const BT::RosNodeParams& params) :
-        RosServiceNode<nav_msgs::srv::GetMap>(instance_name, conf, params)
+                          const BT::NodeConfig& conf) :
+        BT::SyncActionNode(instance_name, conf)
 
     {}
 
 
     static PortsList providedPorts()
     {
-    PortsList base_ports = RosServiceNode::providedPorts();
-
     PortsList child_ports = { 
+                InputPort<nav_msgs::msg::OccupancyGrid>(MAP_IN),
                 OutputPort<std::vector<PoseStamped>>(OBS_POS),
                 OutputPort<int>(OBS_NUM)
             };
 
-    child_ports.merge(base_ports);
-
     return child_ports;
     }
 
-    bool setRequest(typename Request::SharedPtr& request) override
+    BT::NodeStatus tick() override
     {
-        return true;
-    }
+        nav_msgs::msg::OccupancyGrid mission_map;
+        auto res = getInput(MAP_IN,mission_map);
 
-    BT::NodeStatus onResponseReceived(const typename Response::SharedPtr& response) override
-    {
-        auto mission_map = response.get()->map;
-
+        if(!res)
+        {
+            //No map to filter.
+            return BT::NodeStatus::FAILURE;
+        }
+        
         std::vector<std::vector<int>> map_rows;
         for (int x = 0; x < mission_map.data.size();x+=mission_map.info.width)
         {
@@ -136,8 +135,7 @@ public:
                 mm << "\n";
             }
         
-        RCLCPP_INFO(node_->get_logger(), mm.str().c_str());
-  
+
         std::vector<std::vector<std::vector<double>>> obstacles = find_groups(map_rows); //this contains the rows, col of each obstacles
 
         std::stringstream ob;
@@ -149,8 +147,6 @@ public:
                 ob << "x: " << points[0] << " y: " << points[1] << "\n";
             }
         }
-
-        RCLCPP_INFO(node_->get_logger(), ob.str().c_str());
 
         double origin_x = mission_map.info.origin.position.x;
         double origin_y = mission_map.info.origin.position.y;
@@ -170,11 +166,7 @@ public:
                 pt[1] = origin_x + ( (pt[1]*mission_map.info.resolution) + (mission_map.info.resolution/2.0));
                 pt[0] = origin_y + ( (pt[0]*mission_map.info.resolution) + (mission_map.info.resolution/2.0));
 
-                
-
-                RCLCPP_INFO(node_->get_logger(), ss.str().c_str());
-                RCLCPP_INFO(node_->get_logger(), tt.str().c_str());
-
+            
             }
         }
 
@@ -264,12 +256,10 @@ public:
             reordered_visiting.push_back(re_min_point);
             route_poses.erase(std::remove(route_poses.begin(), route_poses.end(), re_min_point), route_poses.end());
         }
-        RCLCPP_INFO(node_->get_logger(), "Am here!");
 
         for (const auto& pose : reordered_visiting) {
             std::stringstream ss;
             ss << "(x: " << pose.pose.position.x << ", y: " << pose.pose.position.y << ")" << std::endl;
-            RCLCPP_INFO(node_->get_logger(), ss.str().c_str());
         }
 
         setOutput(OBS_POS, reordered_visiting);

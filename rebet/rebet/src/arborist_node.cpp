@@ -24,22 +24,33 @@
 
 #include "rebet/system_attribute_value.hpp"
 
-#include "rebet/slam_action_node.h"
-#include "rebet/identify_action_node.h"
-#include "rebet/identifyobject_action_node.h"
-#include "rebet/gotopose_action_node.h"
-#include "rebet/initial_pose.h"
-#include "rebet/filter_obstacles.h"
+#include "rebet_frog/slam_action_node.h"
+#include "rebet_frog/identifyobject_action_node.h"
+#include "rebet_frog/gotopose_action_node.h"
+#include "rebet_frog/initial_pose.h"
+#include "rebet_frog/filter_obstacles.h"
+#include "rebet_frog/get_map.h"
+#include "rebet_frog/find_frontier.h"
+#include "rebet_frog/dock_location.h"
+
+
+
+#include "rebet_frog/frog_qrs.h"
+#include "rebet_frog/frog_adapt_nodes.h"
+
+
 #include "rebet/camera_feed_node.h"
+#include "rebet/sleep_node.h"
+
 
 
 #include "rebet/qr_node.h"
 #include "rebet/adapt_node.h"
-#include "rebet/spiral_search.h"
-#include "rebet/follow_pipeline.h"
-#include "rebet/arm_motors.h"
-#include "rebet/set_mavros_mode.h"
-#include "rebet/confirm_mavros_status.h"
+#include "rebet_suave/spiral_search.h"
+#include "rebet_suave/follow_pipeline.h"
+#include "rebet_suave/arm_motors.h"
+#include "rebet_suave/set_mavros_mode.h"
+#include "rebet_suave/confirm_mavros_status.h"
 
 
 
@@ -111,7 +122,6 @@ public:
       //I suppose here you register all the possible custom nodes, and the determination as to whether they are actually used lies in the xml tree provided.
 
       registerActionClient<SLAMAction>(factory, "bt_slam_client", "slam", "SLAMfd");
-      registerActionClient<IdentifyAction>(factory, "bt_identify_client", "identify", "IDfd");
       registerActionClient<IdentifyObjectAction>(factory, "bt_identifyobject_client", "checkForObjectsActionName", "identifyObject");
       
       registerActionClient<SpiralSearch>(factory, "bt_spiral_client", "spiral", "SpiralSearch");
@@ -127,19 +137,32 @@ public:
       registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_client", "navigate_to_pose", "visitObs");
       registerTopicClient<ProvideInitialPose>(factory,"bt_initialpose_pub","initialPose");
       registerTopicClient<CameraFeedNode>(factory,"bt_camera_sub","CameraFeed");
-      registerServiceClient<FilterObstacles>(factory,"bt_filtersobs_cli","filterObstacles");
+      registerServiceClient<GetMap>(factory,"bt_getmap_cli","getMap");
+      registerServiceClient<FindFrontier>(factory,"bt_findfrontier_cli","findFrontier");
+      registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_frontier_client", "navigate_to_pose", "visitFrontier");
+      registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_dock_client", "navigate_to_pose", "visitChargingDock");
       
-      factory.registerNodeType<TaskEfficiencyQR>("TaskEfficiencyQR");
+      factory.registerNodeType<FilterObstacles>("filterObstacles");
+      factory.registerNodeType<SleepNode>("Sleep");
+
+      
+      factory.registerNodeType<ObjectDetectionEfficiencyQR>("DetectObjectsEfficiently");
       factory.registerNodeType<PowerQR>("PowerQR");
+      factory.registerNodeType<SafetyQR>("SafetyQR");
+
+      factory.registerNodeType<MovementEfficiencyQR>("MovementEfficiencyQR");
+
       factory.registerNodeType<SearchEfficiencyQR>("SearchEfficiencyQR");
-      factory.registerNodeType<AdaptPictureRate>("AdaptPictureRate");
-      factory.registerNodeType<AdaptSpiralAltitude>("AdaptSpiralAltitude");
-      factory.registerNodeType<AdaptThrusterRecovery>("AdaptThrusterRecovery");
+      factory.registerNodeType<AdaptPictureRateOnline>("AdaptPictureRate");
+      factory.registerNodeType<AdaptSpiralAltitudeOnline>("AdaptSpiralAltitude");
+      factory.registerNodeType<AdaptThrusterOffline>("AdaptThrusterRecovery");
+      factory.registerNodeType<AdaptMaxSpeedOnline>("AdaptMaxSpeed");
+      factory.registerNodeType<AdaptChargeConditionOffline>("WhetherToCharge");
+      factory.registerNodeType<SetDockLocation>("SetChargingDockLocation");
 
 
 
-
-      this->declare_parameter(BT_NAME_PARAM, "spiraltest.xml");
+      this->declare_parameter(BT_NAME_PARAM, "frog.xml");
       this->declare_parameter(EXP_NAME_PARAM, "no_experiment_name");
 
       bt_name = this->get_parameter(BT_NAME_PARAM).as_string();
@@ -161,21 +184,16 @@ public:
 
       float max_pics_ps = this->get_parameter(ENG_MAX_PIC_PS_NAME).as_double();
       int msn_window_length = this->get_parameter(TSK_WINDOW_LEN_NAME).as_int();
-      int eng_window_length = this->get_parameter(POW_WINDOW_LEN_NAME).as_int();
+      int pow_window_length = this->get_parameter(POW_WINDOW_LEN_NAME).as_int();
 
 
 
-      auto node_visitor = [max_objs_ps, msn_window_length, eng_window_length, max_pics_ps](TreeNode* node)
+      auto node_visitor = [max_objs_ps, msn_window_length, pow_window_length, max_pics_ps](TreeNode* node)
       {
-        if (auto task_qr_node = dynamic_cast<TaskEfficiencyQR*>(node))
-        {
-          task_qr_node->initialize(max_objs_ps,
-                                       msn_window_length);
-        }
         if (auto power_qr_node = dynamic_cast<PowerQR*>(node))
         {
           power_qr_node->initialize(max_pics_ps,
-                                       eng_window_length);
+                                       pow_window_length);
         }
         if (auto search_qr_node = dynamic_cast<SearchEfficiencyQR*>(node))
         {
@@ -184,6 +202,7 @@ public:
       };
 
       
+
 
       // Apply the visitor to ALL the nodes of the tree
       tree.applyVisitor(node_visitor);
@@ -274,6 +293,8 @@ private:
       tree.rootBlackboard()->set<rebet::SystemAttributeValue>(sys_attr.name, sys_attvalue_obj);
     }
     response->success = true;
+    RCLCPP_INFO(this->get_logger(), "Set Attributes Service finished in Arborist Node");
+
   }
 
   template <class T>
@@ -340,6 +361,28 @@ private:
   }
 
 
+
+  float getFloatOrNot(std::string blackboard_key)
+  {
+    bool gotten = false;
+    float value_to_get;
+    try
+    {
+      gotten = tree.rootBlackboard()->get<float>(blackboard_key,value_to_get);
+    }
+    catch (const std::runtime_error& error)
+    {
+      gotten = false;   
+    }
+
+    if(gotten)
+    {
+      return value_to_get;
+    }
+
+    return -10.0;
+
+  }
 
 
 
@@ -560,10 +603,33 @@ private:
     auto feedback = std::make_shared<BTAction::Feedback>();
     feedback->node_status = "placeholder";
 
+    std::vector<float> average_safety_qrs = {};
+    std::vector<float> average_power_qrs = {};
+    std::vector<float> average_movement_qrs = {};
+    std::vector<float> average_task_qrs = {};
+    std::vector<float> safety_qrs = {};
+    std::vector<float> power_qrs = {};
+    std::vector<float> movement_qrs = {};
+    std::vector<float> task_qrs = {};
+
+    std::vector<std::string> max_velocities = {};
+    std::vector<std::string> pic_rates = {};
+    std::vector<std::string> average_utilities = {};
+    std::vector<std::string> task_names = {};
+
+
+
+    
+
+
+
+
+
     auto result = std::make_shared<BTAction::Result>();
-
+    int elapsed_seconds = 0;
+    int time_since_last = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     NodeStatus result_of_tick;
-
+    int total_elapsed = 0;
 
     do {
       // Check if there is a cancel request
@@ -576,6 +642,7 @@ private:
 
       try{
         result_of_tick = tree.tickOnce();
+
       }
       catch (const std::runtime_error& error)
       {
@@ -587,11 +654,15 @@ private:
         result_of_tick = NodeStatus::FAILURE;
       }
 
-      feedback->node_status = toStr(result_of_tick);
+      feedback->node_status = toStr(result_of_tick) + " " + std::to_string(total_elapsed);
       // Publish feedback
       goal_handle->publish_feedback(feedback);
       // RCLCPP_INFO(this->get_logger(), "Publish feedback");
 
+      if(total_elapsed >= 500)
+      {
+        result_of_tick = NodeStatus::SUCCESS;
+      }
       // Check if goal is done
       if(result_of_tick != NodeStatus::RUNNING) {
         if (rclcpp::ok()) {
@@ -607,31 +678,76 @@ private:
           goal_handle->succeed(result);
           RCLCPP_INFO(this->get_logger(), "Goal finished: Done ticking the tree");
           
-          // //Reporting on mission
-          // float id_time_elapsed = tree.rootBlackboard()->get<float>("id_time_elapsed");
-          // int32_t id_picture_rate = tree.rootBlackboard()->get<int32_t>("id_picture_rate");
-          // float avg_task_metric = tree.rootBlackboard()->get<float>("task_mean_metric");
-          // float avg_power_metric = tree.rootBlackboard()->get<float>("power_mean_metric");
+          //Reporting on mission
+          std::vector<std::vector<float>> float_report_values = {average_safety_qrs, average_power_qrs, average_movement_qrs, average_task_qrs, safety_qrs, power_qrs, movement_qrs, task_qrs};
 
-          // int32_t id_det_threshold = tree.rootBlackboard()->get<int32_t>("id_det_threshold");
-          // auto average_utility = tree.rootBlackboard()->get<std::string>("average_utility");
+          std::vector<std::string> report_strings = {};
+          for (auto const & thing_to_report : float_report_values)
+          {
+            std::cout << "1len " << thing_to_report.size() << std::endl;
+            std::string value_as_string = "";
+            for (auto const & value_to_report : thing_to_report)
+            {
+              value_as_string += std::to_string(value_to_report);
+              value_as_string += ";";
+            }
+            report_strings.push_back(value_as_string);
+          }
 
+          std::vector<std::vector<std::string>> string_report_values = {max_velocities, pic_rates, average_utilities, task_names};
 
-          
-          // auto curr_time_pointer = std::chrono::system_clock::now();
-          // int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
+          for (auto const & thing_to_report : string_report_values)
+          {
+            std::cout << "2len " << thing_to_report.size() << std::endl;
+            
+            std::string value_as_string = "";
+            for (auto const & value_to_report : thing_to_report)
+            {
+              value_as_string += value_to_report;
+              value_as_string += ";";
+            }
+            report_strings.push_back(value_as_string);
+          }
 
-          // // file pointer
-          // std::fstream fout;
+          auto curr_time_pointer = std::chrono::system_clock::now();
+          int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
+
+          // file pointer
+          std::fstream fout;
         
-          // // opens an existing csv file or creates a new file.
-          // fout.open("rebet_results.csv", std::ios::out | std::ios::app);
+          // opens an existing csv file or creates a new file.
+          fout.open("rebet_results.csv", std::ios::out | std::ios::app);
         
-          // //Header
-          // // fout << "timestamp" << ", " 
-          // //     << "picture_rate" << ", "
-          // //     << "time_elapsed" << "\n";
 
+
+
+
+          // Header
+          fout << "timestamp" << ", " 
+               << "average_safety_qrs" << ", "
+               << "average_power_qrs" << ", "
+               << "average_movement_qrs" << ", "
+               << "average_task_qrs" << ", "
+               << "safety_qrs" << ", "
+               << "power_qrs" << ", "
+               << "movement_qrs" << ", "
+               << "task_qrs" << ", "
+               << "max_velocities" << ", "
+               << "pic_rates" << ", "
+               << "average_utilities" << ", "
+               << "current_task" << ", "
+               << "bt_name" << "\n";
+
+
+          fout << current_time << ", ";
+
+          for (auto const & thing_to_report : report_strings)
+          {
+            fout << thing_to_report << ", ";
+
+          }
+
+          fout << bt_name << "\n";
           // // Insert the data to file
           // fout << current_time << ", " 
           //     << id_picture_rate << ", "
@@ -644,24 +760,104 @@ private:
           //     << average_utility << "\n";
 
             
-          // fout.close();
+          fout.close();
 
+          std::ofstream outfile ("mission.done");
 
+          outfile << "." << std::endl;
 
-          // std::ofstream outfile ("mission.done");
-
-          // outfile << "." << std::endl;
-
-          // outfile.close();
+          outfile.close();
 
           break;
         }
 
       }
+      else{
+        //While running..
+        auto curr_time_pointer = std::chrono::system_clock::now();
+
+        int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
+        int elapsed_seconds = current_time-time_since_last;
+        //Every second I record an entry
+        if(elapsed_seconds >= 1 )
+        {
+          total_elapsed++;
+          RCLCPP_INFO(this->get_logger(), "one second passed");
+          time_since_last = current_time;
+
+          if(bt_name == "frog.xml")
+          {
+
+            average_safety_qrs.push_back(getFloatOrNot("safe_mean_metric"));
+            average_power_qrs.push_back(getFloatOrNot("power_mean_metric"));
+            average_movement_qrs.push_back(getFloatOrNot("move_mean_metric"));
+            average_task_qrs.push_back(getFloatOrNot("task_mean_metric"));
+            safety_qrs.push_back(getFloatOrNot("safe_metric"));
+            power_qrs.push_back(getFloatOrNot("power_metric"));
+            movement_qrs.push_back(getFloatOrNot("move_metric"));
+            task_qrs.push_back(getFloatOrNot("task_metric"));
+
+            // max_velocities.push_back(tree.rootBlackboard()->get<float>("task_metric"));
+
+            std::string pic_rate_bb;
+            bool pic_rate_present = tree.rootBlackboard()->get<std::string>("pic_rate", pic_rate_bb);
+            if(pic_rate_present)
+            {
+              pic_rates.push_back(pic_rate_bb);
+            }
+            else
+            {
+              pic_rates.push_back("pic_rate_not_present");
+            }
+
+            std::string max_vel;
+            bool max_vel_present = tree.rootBlackboard()->get<std::string>("max_velocity",max_vel);
+            if(max_vel_present)
+            {
+              max_velocities.push_back(max_vel);
+            }
+            else
+            {
+              max_velocities.push_back("max_vel_not_present");
+            }
+            std::string average_util;
+            bool avg_util_present = tree.rootBlackboard()->get<std::string>("average_utility",average_util);
+            if(avg_util_present)
+            {
+              average_utilities.push_back(average_util);
+            }
+            else
+            {
+              average_utilities.push_back("average_util_not_present");
+
+            }
+
+            std::string curr_task_name;
+            bool curr_task_present = tree.rootBlackboard()->get<std::string>("current_task",curr_task_name);
+            if(curr_task_present)
+            {
+              task_names.push_back(curr_task_name);
+            }
+            else
+            {
+              task_names.push_back("task_name_not_present");
+            }
+            // float id_time_elapsed = tree.rootBlackboard()->get<float>("id_time_elapsed");
+            // int32_t id_picture_rate = tree.rootBlackboard()->get<int32_t>("id_picture_rate");
+            // float avg_task_metric = tree.rootBlackboard()->get<float>("task_mean_metric");
+            // float avg_power_metric = tree.rootBlackboard()->get<float>("power_mean_metric");
+
+            // int32_t id_det_threshold = tree.rootBlackboard()->get<int32_t>("id_det_threshold");
+            // auto average_utility = tree.rootBlackboard()->get<std::string>("average_utility");
+          }
+        }
+      }
+
     }
     while(result_of_tick == NodeStatus::RUNNING);
   }
 
+  
 
   rclcpp_action::GoalResponse handle_tree_goal(
     const rclcpp_action::GoalUUID & uuid,

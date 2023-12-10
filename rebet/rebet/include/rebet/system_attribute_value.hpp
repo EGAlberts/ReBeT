@@ -13,7 +13,7 @@
 
 #include "nav_msgs/msg/odometry.hpp"
 #include "diagnostic_msgs/msg/key_value.hpp"
-#include "sensor_msgs/msg/laser_scan  .hpp"
+#include "sensor_msgs/msg/laser_scan.hpp"
 
 
 //Inspired by rclcpp/parameter_value.hpp

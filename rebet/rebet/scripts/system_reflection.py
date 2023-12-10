@@ -128,7 +128,7 @@ class SystemReflection(Node):
             att_value = SystemAttributeValue()
             att_value.header.stamp = self.get_clock().now().to_msg()
             att_value.type = 3 #laserscan type
-            att_value.odom_value = self.laser_msg
+            att_value.laser_value = self.laser_msg
             new_sys_att.value = att_value 
             self.req.sys_attributes.append(new_sys_att)
 

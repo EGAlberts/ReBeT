@@ -1,0 +1,5 @@
+rebet_msgs/AdaptationOptions[] adaptation_space
+string task_identifier
+string adaptation_strategy
+---
+bool success

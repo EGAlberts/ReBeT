@@ -1,22 +1,54 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from rebet_msgs.srv import GetQR, GetVariableParams, SetBlackboard, AdaptSystem, RequestAdaptation, SetParameterInBlackboard
+from rebet_msgs.srv import GetQR, GetVariableParams, SetBlackboard, OnlineAdaptation, OfflineAdaptation, SetParameterInBlackboard
 from rcl_interfaces.msg import Parameter
 from std_msgs.msg import Float64
-from rebet_msgs.msg import AdaptationState, Configuration, QRValue
+from rebet_msgs.msg import AdaptationState, Configuration, QRValue, Adaptation
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rcl_interfaces.srv import SetParameters
 from rebet.adaptation_strategies import create_strategy
-from lifecycle_msgs.srv import ChangeState
+from lifecycle_msgs.srv import ChangeState, GetState
 from itertools import product
 import numpy as np
 import sys
 
 ADAP_PERIOD_PARAM = "adaptation_period"
 
+ROS_LIFECYCLE = "ros_lifecycle"
+ROS_PARAM = "ros_parameter"
+BLACKBOARD = "blackboard"
+ADAP_DICT = {
+    0: ROS_LIFECYCLE,
+    1: ROS_PARAM,
+    2: BLACKBOARD
+}
 
+
+def value_from_param(param_msg):
+    param_type = param_msg.value.type
+
+
+    # uint8 PARAMETER_BOOL=1
+    # uint8 PARAMETER_INTEGER=2
+    # uint8 PARAMETER_DOUBLE=3
+    # uint8 PARAMETER_STRING=4
+    # uint8 PARAMETER_BYTE_ARRAY=5
+    # uint8 PARAMETER_BOOL_ARRAY=6
+    # uint8 PARAMETER_INTEGER_ARRAY=7
+    # uint8 PARAMETER_DOUBLE_ARRAY=8
+    # uint8 PARAMETER_STRING_ARRAY=9
+
+    if(param_type == 1): return param_msg.value.bool_value
+    if(param_type == 2): return param_msg.value.integer_value
+    if(param_type == 3): return param_msg.value.double_value
+    if(param_type == 4): return param_msg.value.string_value
+    if(param_type == 5): return param_msg.value.byte_array_value
+    if(param_type == 6): return param_msg.value.bool_array_value
+    if(param_type == 7): return param_msg.value.integer_array_value
+    if(param_type == 8): return param_msg.value.double_array_value
+    if(param_type == 9): return param_msg.value.string_array_value
 
 class AdaptationManager(Node):
 
@@ -31,14 +63,11 @@ class AdaptationManager(Node):
         self.adaptation_period = self.get_parameter(ADAP_PERIOD_PARAM).get_parameter_value().integer_value
 
         # self.timer = self.create_timer(self.adaptation_period, self.timer_callback)
-        self.srv_adapt = self.create_service(RequestAdaptation, '/request_adaptation',self.adaptation_requested)
+        self.srv_online_adapt = self.create_service(OnlineAdaptation, '/online_adaptation',self.online_adaptation_requested)
+        self.srv_offline_adapt = self.create_service(OfflineAdaptation, '/offline_adaptation',self.offline_adaptation_requested)
+
         
         self.cli_bb_exec = self.create_client(SetParameterInBlackboard, '/set_parameter_in_blackboard', callback_group=exclusive_group)
-        self.req_bb_exec = SetParameterInBlackboard.Request()
-
-        self.req_rp_exec = SetParameters.Request()
-
-        self.req_lc_exec = ChangeState.Request()
 
 
 
@@ -56,6 +85,10 @@ class AdaptationManager(Node):
         self.bounds_dict = {}
         self.set_parameter_client_dict = {}
         self.change_state_client_dict = {}
+        self.get_state_client_dict = {}
+        self.reporting_dict = {}
+        
+
 
 
 
@@ -113,35 +146,64 @@ class AdaptationManager(Node):
             qr_val.qr_fulfilment = (qr.weight/weight_sum) * normalized_value
             all_the_qrs.append(qr_val)
 
+        self.req_sbb.script_code = ""
+        for key in list(self.reporting_dict.keys()):
+            if(str(key) != "pic_rate"):
+                if(str(key) == "max_velocity"):
+                    rep_val = str(self.reporting_dict[key][0])
+                else:
+                    rep_val = str(self.reporting_dict[key])
+                self.req_sbb.script_code+=str(key)
+                self.req_sbb.script_code+=":='"
+                self.req_sbb.script_code+=rep_val
+                self.req_sbb.script_code+="';"
+
             
+        
+        self.req_sbb.script_code+= "average_utility:='" 
         self.reporting[0]+=(np.product([qr.qr_fulfilment for qr in all_the_qrs]))
         self.reporting[1]+=1
         self.req_sbb.script_code+=str(self.reporting[0]/self.reporting[1]) + "'"
+
+
+
 
         self.get_logger().info(self.req_sbb.script_code)
 
         res = self.cli_sbb.call(self.req_sbb)
         self.get_logger().info("Put this in the whiteboard for average utility " + str(self.reporting[0]/self.reporting[1]) + " with res " + str(res.success))
 
-        self.req_sbb.script_code = "average_utility:='"
+        
         return all_the_qrs
     
-    def make_configurations(self, variable_parameters_obj):
+    def make_configurations(self, adaptation_options_list):
         param_to_node = {}
+        param_to_target = {}
 
         
         possible_configurations = []
 
         possible_configurations = []
         list_of_list_param = []
-        for knob in variable_parameters_obj.variable_parameters:
+        for adaptation_options in adaptation_options_list:
+            #AdaptationOptions.msg:
+            # #name of the parameter
+            # string name
+            # #name of the node (if any) it belongs to
+            # string node_name
+            # #The type of adaptation being done to the target, this is constrained choice specified in Adaptation.msg
+            # int8 adaptation_target_type
+            # #A presumed finite set of acceptable values for the parameter to hold.
+            # rcl_interfaces/ParameterValue[] possible_values 
+
             decomposed = []
-            #knob is a msg of type VariableParameter is name-potential_values pair representing a thing that can change about the current state of the system.
-            for pos_val in knob.possible_values:
+
+            for pos_val in adaptation_options.possible_values:
                 param = Parameter()
-                param.name = knob.name
+                param.name = adaptation_options.name
                 param.value = pos_val
-                param_to_node[str((param.name, param.value))] = knob.node_name
+                param_to_node[str((param.name, param.value))] = adaptation_options.node_name
+                param_to_target[str((param.name, param.value))] = adaptation_options.adaptation_target_type
                 decomposed.append(param)
             list_of_list_param.append(decomposed)
         
@@ -156,19 +218,31 @@ class AdaptationManager(Node):
                 possible_config_list = list(possible_config)
                 config_msg = Configuration()
                 config_msg.node_names = [param_to_node[str((param.name, param.value))] for param in possible_config_list]
+                config_msg.adaptation_target_types = [param_to_target[str((param.name, param.value))] for param in possible_config_list]
                 config_msg.configuration_parameters = possible_config
                 config_list.append(config_msg)
         #The arms should consists of a list of Parameter, name value pairs of each parameter given.
         return config_list
 
 
-    def execute_bb_adaptation(self, config_msg):        
-        self.req_bb_exec.ros_parameters = config_msg.configuration_parameters
+    def execute_bb_adaptation(self, param_msg): 
+
+        req_bb_exec = SetParameterInBlackboard.Request()
+        if type(param_msg) is not list:
+            param_msg = [param_msg]
+
+
+        for par in param_msg:
+            self.reporting_dict[par.name] = value_from_param(par)
+
+        req_bb_exec.ros_parameters = param_msg
+
+        
 
         while not self.cli_bb_exec.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('set param in bb service not available, waiting again...')
         
-        response = self.cli_bb_exec.call(self.req_exec)    
+        response = self.cli_bb_exec.call(req_bb_exec)    
 
         return response.success
 
@@ -180,140 +254,143 @@ class AdaptationManager(Node):
     def create_change_state_client(self, node_name):
         self.change_state_client_dict[node_name] = self.create_client(ChangeState, '/' + node_name + '/change_state', callback_group=MutuallyExclusiveCallbackGroup())
 
-    def execute_rp_adaptation(self, config_msg):
-        send_dict = {}
-        node_names = config_msg.node_names
-        params = config_msg.configuration_parameters
+
+    def execute_rp_adaptation(self, param_msg, node_name):
+        if node_name not in self.set_parameter_client_dict: 
+            self.create_set_param_client(node_name)  
+
+        client = self.set_parameter_client_dict[node_name]
         
-        for i in range(len(node_names)):
-            curr_node_name = node_names[i]
-            if curr_node_name not in send_dict: send_dict[curr_node_name] = [params[i]]
-            else:
-                send_dict[curr_node_name].append(params[i])
+        if type(param_msg) is not list:
+            param_msg = [param_msg]
 
-        #send requests
+        for par in param_msg:
+            self.reporting_dict[par.name] = value_from_param(par)
 
-        self.get_logger().info('Send dict: !! ' + str(send_dict))
+        req_rp_exec = SetParameters.Request()
+
+
+
+        req_rp_exec.parameters = param_msg
+
+
+        while not client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('set_param service not available, waiting again...')
+            
+        response = client.call(req_rp_exec)
         
-        for node_name in list(send_dict.keys()):
-            self.req_rp_exec.parameters = send_dict[node_name]
-
-            if node_name not in self.set_parameter_client_dict: 
-                self.create_set_param_client(node_name)
-
-            client = self.set_parameter_client_dict[node_name]
-
-            while not client.wait_for_service(timeout_sec=1.0):
-                        self.get_logger().info('set_param service not available, waiting again...')
-            
-            response = client.call(self.req_rp_exec)
-            
-            if(not all([res.successful for res in response.results])):
-                self.get_logger().warning('One or more requests to set a parameter were unsuccessful in the Adaptation Manager, see reason(s):' + str(response.results))
-                return False
+        if(not all([res.successful for res in response.results])):
+            self.get_logger().warning('One or more requests to set a parameter were unsuccessful in the Adaptation Manager, see reason(s):' + str(response.results))
+            return False
             
         return True
     
-    def execute_lc_adaptation(self, var_params, transitions):
+    def execute_lc_adaptation(self, transition, node_name):
         self.get_logger().info("\n\n\ LC adaptation \n\n\n\n\n")
 
         
-        response_bools = []
-        node_names = [knob.node_name for knob in var_params.variable_parameters]
+        if node_name not in self.change_state_client_dict: 
+            self.create_change_state_client(node_name)
 
-        if(len(transitions) > len(node_names)):
-            self.get_logger().error("More transitions asked for than I have nodes to do so to, if you want multiple transitions send multiple requests!")
-            return False
-    
+        client = self.change_state_client_dict[node_name]
 
 
-        node_names = node_names[0:len(transitions)] #We consider that if you specify fewer transitions than nodes for whatever reason, I only transition as many as you specify transitions for.
+        while not client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('change_state service not available, waiting again...')
         
-        for i, node_name in enumerate(node_names):
-            self.req_lc_exec.transition = transitions[i]
-
-            if node_name not in self.change_state_client_dict: 
-                self.create_change_state_client(node_name)
-
-            client = self.change_state_client_dict[node_name]
+        self.get_logger().info("\n\n\Sending LC adaptation request\n\n\n\n\n")
 
 
-            while not client.wait_for_service(timeout_sec=1.0):
-                        self.get_logger().info('set_param service not available, waiting again...')
-            
-            self.get_logger().info("\n\n\Sending LC adaptation request\n\n\n\n\n")
+        req_lc_exec = ChangeState.Request()
+        req_lc_exec.transition = transition
 
-            response = client.call(self.req_lc_exec)
-            response_bools.append(response.success)
-            if(not response.success):
-               self.get_logger().warning('A request to change a state was unsuccessful in the Adaptation Manager')
+        response = client.call(req_lc_exec)
+
+        if(not response.success):
+            self.get_logger().warning('A request to change a state was unsuccessful in the Adaptation Manager')
         
 
         self.get_logger().info("\n\n\nFinishing LC adaptation\n\n\n\n\n")
 
-        return all(response_bools)
+        return response.success
             
 
 
 
-    def timer_callback(self):        
-        #I should probably make functions like these into utilities, like as members of a subclass of Node..
+    # def timer_callback(self):        
+    #     #I should probably make functions like these into utilities, like as members of a subclass of Node..        
+    #     msg = AdaptationState()
+    #     msg.qr_values = self.get_system_utility()
+    #     msg.system_possible_configurations = self.get_system_vars()
+    #     self.publisher_.publish(msg)
+    #     self.get_logger().info('\n\n\nPublishing: "%s"\n\n\n\n\n' % msg)
+    #     self.i += 1
 
 
+    def offline_adaptation_requested(self, request, response):
+        # rebet_msgs/Adaptation[] adaptation
+        # ---
+        # bool success
+
+        for adaptation_to_execute in request.adaptations:
+            adaptation_results = []
+            type_of_adaptation = adaptation_to_execute.adaptation_type
+
+            if(type_of_adaptation is None): 
+                self.get_logger().error("Unknown or unspecified type of adaptation")
+                response.success = False
+                return response
 
 
+            if(type_of_adaptation == Adaptation.STATETRANSITION):
+                self.get_logger().info('\n\n ros_lc adaptation \n\n')
+                is_exec_success = self.execute_lc_adaptation(adaptation_to_execute.lifecycle_adaptation,adaptation_to_execute.node_name)                
+            elif(type_of_adaptation == Adaptation.ROSPARAMETER):
+                self.get_logger().info('\n\n ros_param adaptation \n\n')
+                is_exec_success = self.execute_rp_adaptation(adaptation_to_execute.parameter_adaptation,adaptation_to_execute.node_name)
+            elif(type_of_adaptation == Adaptation.BLACKBOARDENTRY):
+                self.get_logger().info('\n\n blackboard adaptation \n\n')
+                is_exec_success = self.execute_bb_adaptation(adaptation_to_execute.blackboard_adaptation)
+
+            adaptation_results.append(is_exec_success)
+
+
+        response.success = all(adaptation_results)
+        return response 
+       
         
-        msg = AdaptationState()
-        msg.qr_values = self.get_system_utility()
-        msg.system_possible_configurations = self.get_system_vars()
-        self.publisher_.publish(msg)
-        self.get_logger().info('\n\n\nPublishing: "%s"\n\n\n\n\n' % msg)
-        self.i += 1
+    def online_adaptation_requested(self, request, response):
+        # rebet_msgs/AdaptationOptions[] adaptation_space
+        # string task_identifier
+        # string adaptation_strategy
+        # ---
+        # bool success
 
-    def adaptation_requested(self, request, response):
         task_identifier = str(request.task_identifier)
         adaptation_strategy = str(request.adaptation_strategy)
-        adaptation_target = str(request.adaptation_target)
-        self.get_logger().info('\n\n\hi:\n\n\n\n\n')
 
         response.success = False
         adapt_state = AdaptationState()
 
-        #non-parametric adaptation
-        if(adaptation_target == "ros_lifecycle"): 
-            self.get_logger().info('\n\n ros_service adaptation \n\n')
-            is_exec_success = self.execute_lc_adaptation(request.adaptation_options, request.lifecycle_transitions)
-            response.success = is_exec_success
-            return response
+        adapt_state.qr_values = self.get_system_utility()
+        self.get_logger().info('\n\n sys util \n\n')
 
-        self.get_logger().info('\n\n pre sys util \n\n')
-
-
-        #Parametric adaptation ahead
-
-        # adapt_state.qr_values = self.get_system_utility()
-        # self.get_logger().info('\n\n sys util \n\n')
-
-        adapt_state.system_possible_configurations = self.make_configurations(request.adaptation_options)
+        adapt_state.system_possible_configurations = self.make_configurations(request.adaptation_space)
 
         self.get_logger().info(str(adapt_state.system_possible_configurations))
         
         
-        all_the_qrs = []
+        # all_the_qrs = []
 
-        for i in range(5):
-            qr_val = QRValue()
-            qr_val.name = "test"
-            qr_val.qr_fulfilment = 5.0
-            all_the_qrs.append(qr_val)
+        # for i in range(5):
+        #     qr_val = QRValue()
+        #     qr_val.name = "test"
+        #     qr_val.qr_fulfilment = 5.0
+        #     all_the_qrs.append(qr_val)
 
-        adapt_state.qr_values = all_the_qrs
+        # adapt_state.qr_values = all_the_qrs
 
         #new task or new strategy for the same task.
-
-        condition_one = False
-        condition_two = False
-
 
         if ( (task_identifier not in self.task_to_strategy_map) or ( (task_identifier in self.task_to_strategy_map) and (adaptation_strategy != self.task_to_strategy_map[task_identifier].get_name()) ) ):
             self.task_to_strategy_map[task_identifier] = create_strategy(adaptation_strategy)
@@ -329,21 +406,31 @@ class AdaptationManager(Node):
 
         
         suggested_configuration = self.task_to_strategy_map[task_identifier].suggest_adaptation(adapt_state)
-
+        #Configuration.msg
+        #string[] node_names
+        #int8[] adaptation_target_types
+        #rcl_interfaces/Parameter[] configuration_parameters
         
-        if(adaptation_target == "ros_node"):
-            self.get_logger().info('\n\n ros_node adaptation \n\n')
+        for i in range(len(suggested_configuration.node_names)):
+            node_name = suggested_configuration.node_names[i]
+            type_of_adaptation = suggested_configuration.adaptation_target_types[i]
+            adaption_param = suggested_configuration.configuration_parameters[i]
 
-            is_exec_success = self.execute_rp_adaptation(suggested_configuration)
-        elif(adaptation_target == "blackboard"):
-            self.get_logger().info('\n\n blackboard adaptation \n\n')
-            is_exec_success = self.execute_bb_adaptation(suggested_configuration)
-        else:
-            self.get_logger().error("Unknown or unspecified adaptation_target")
-            response.success = False
-            return response
-        
-        response.success = is_exec_success
+            adaptation_responses = []
+             
+            if(type_of_adaptation == Adaptation.ROSPARAMETER):
+                self.get_logger().info('\n\n ros_param adaptation \n\n')
+                is_exec_success = self.execute_rp_adaptation(adaption_param,node_name)
+            elif(type_of_adaptation == Adaptation.BLACKBOARDENTRY):
+                self.get_logger().info('\n\n blackboard adaptation \n\n')
+                is_exec_success = self.execute_bb_adaptation(adaption_param)
+            else:
+                self.get_logger().error("Unknown or unspecified adaptation_target")
+                response.success = False
+                return response
+            adaptation_responses.append(is_exec_success)
+
+        response.success = all(adaptation_responses)
         
         return response
 

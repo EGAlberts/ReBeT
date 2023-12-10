@@ -1,0 +1,65 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="FROG">
+  	
+	<Sequence>
+		<Script code="charge_or_not='no_charge'; pic_rate:=5; task_weight:=1.0; task_metric:=1.0; power_weight:=1.0; power_metric:=1.0; move_weight:=1.0; move_metric:=1.0; safe_weight:=1.0; safe_metric:=1.0"/>
+		<initialPose topic_name="initialpose"/>
+		
+		
+		
+		<Repeat num_cycles="-1">
+			<PowerQR weight="{power_weight}" metric="{power_metric}" objs_identified="{objects_detected}"  in_odom="{odometry}" in_picture_rate="{id_picture_rate}" mean_metric="{power_mean_metric}">
+			<WhetherToCharge power_consumed="{power_metric}" adaptation_subject="charge_or_not" >
+			<Switch2 variable="{charge_or_not}" case_1="charge" case_2="no_charge">
+				<Sequence>
+					<SetChargingDockLocation dock_position="{route_poses}"/>
+					<RetryUntilSuccessful num_attempts="-1">
+						<visitChargingDock poses="{route_poses}" name_of_task="{current_task}"/>
+					</RetryUntilSuccessful>
+					<Sleep msec="10000"/>
+					<SetBlackboard value="no_charge" output_key="charge_or_not" />
+				</Sequence>
+				
+				<Sequence>
+						<getMap service_name="/map_server/map" map_retrieved="{current_map}"/>
+						<filterObstacles map_to_filter="{current_map}" obstacle_positions="{route_poses}" obstacle_number="{num_obstacles}"/>
+						
+							<Repeat num_cycles="{num_obstacles}">
+								<Sequence>
+								<SafetyQR weight="{safe_weight}" metric="{safe_metric}" mean_metric="{safe_mean_metric}" in_laser_scan="{laser_scan}">
+									<MovementEfficiencyQR weight="{move_weight}" metric="{move_metric}" mean_metric="{move_mean_metric}" in_odom="{odometry}"> 
+										<AdaptMaxSpeed adaptation_period="10" adaptation_options="0.08;0.16;0.26" adaptation_strategy="ucb_strategy" adaptation_subject="max_velocity" subject_location="velocity_smoother">
+											<RetryUntilSuccessful num_attempts="-1">
+												<visitObs poses="{route_poses}" name_of_task="{current_task}"/>
+											</RetryUntilSuccessful>
+										</AdaptMaxSpeed>
+									</MovementEfficiencyQR>
+								</SafetyQR>
+								<DetectObjectsEfficiently weight="{task_weight}" objs_identified="{objects_detected}" metric="{task_metric}" mean_metric="{task_mean_metric}" >
+									<AdaptPictureRate adaptation_options="1;5;7" adaptation_strategy="ucb_strategy" adaptation_subject="pic_rate">
+										<Repeat num_cycles="{pic_rate}">
+											<Sequence>
+													<RetryUntilSuccessful num_attempts="-1">
+														<CameraFeed latest_image="{image_feed}" topic_name="/camera/image_raw"/>
+													</RetryUntilSuccessful>
+													<identifyObject in_camera_image="{image_feed}" objs_identified="{objects_detected}" name_of_task="{current_task}"/>
+											</Sequence>
+										</Repeat>
+									</AdaptPictureRate>
+								</DetectObjectsEfficiently>
+								</Sequence>
+							</Repeat>
+
+				</Sequence>
+				<SetBlackboard value="charge" output_key="charge_or_not" />
+			</Switch2>
+			</WhetherToCharge>
+
+			</PowerQR>
+		</Repeat>
+
+
+
+	</Sequence>
+  </BehaviorTree>
+</root>

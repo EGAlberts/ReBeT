@@ -29,12 +29,17 @@ namespace BT
  * Note: If in the future a BT should be designed with multiple instances of the same QR, it would become impractical. Right now the only feasible case it having two QRs which are never active simultaneously. 
  * In all other cases it would require creating a new (very similar) subclass as the linked blackboard entries would otherwise cause issue.
  */
+
+enum class QualityAttribute {Power, Safety, TaskEfficiency, MovementEfficiency};
+
+
 class QRNode : public DecoratorNode
 {
 public:
 
-  QRNode(const std::string& name, const NodeConfig& config) : DecoratorNode(name, config)
+  QRNode(const std::string& name, const NodeConfig& config, QualityAttribute quality_attribute) : DecoratorNode(name, config)
   {
+    _quality_attribute = quality_attribute;
     _average_metric = 0.0;
     _times_calculated = 0;
   }
@@ -49,6 +54,8 @@ public:
   }
 
 
+
+
   virtual ~QRNode() override = default;
 
   //Name for the weight input port
@@ -59,13 +66,25 @@ public:
   static constexpr const char* MEAN_METRIC = "mean_metric";
   static constexpr const char* QR_STATE = "out_state";
 
+  QualityAttribute qa_type()
+  {
+    return _quality_attribute;
+  }
 
+  double current_metric()
+  {
+    return _metric;
+  }
+
+  bool is_higher_better()
+  {
+    return _higher_is_better;
+  }
 
 
 private:
   int weight_;
   bool read_parameter_from_ports_;
-
   virtual NodeStatus tick() override
   {
     setStatus(NodeStatus::RUNNING);
@@ -99,25 +118,21 @@ private:
 
   }
 
-  virtual void calculate_measure()
-  {
-    getInput(WEIGHT, weight_);
-    std::stringstream ss;
 
-    ss << "Weight Port info received: ";
-    // for (auto number : feedback->left_time) {
-    ss << weight_;
-    std::cout << ss.str().c_str() << std::endl;
-    std::cout << "Here's where I would calculate a measure... if I had one" << std::endl;
-  }
+
+  
+
 
 
   //void halt() override;
 
   protected:
+    QualityAttribute _quality_attribute;
     int _times_calculated;
     double _average_metric;
     double _metric;
+    bool _higher_is_better = true;
+
 
     void metric_mean()
     {
@@ -131,19 +146,115 @@ private:
       _times_calculated++; 
     }
 
+    virtual void calculate_measure()
+    {
+      getInput(WEIGHT, weight_);
+      std::stringstream ss;
+
+      ss << "Weight Port info received: ";
+      // for (auto number : feedback->left_time) {
+      ss << weight_;
+      std::cout << ss.str().c_str() << std::endl;
+      std::cout << "Here's where I would calculate a measure... if I had one" << std::endl;
+    }
+
 
 };
 
-class SearchEfficiencyQR : public QRNode
+
+class TaskLevelQR : public QRNode
 {
   public:
-    SearchEfficiencyQR(const std::string& name, const NodeConfig& config) : QRNode(name, config)
+    TaskLevelQR(const std::string& name, const NodeConfig& config, QualityAttribute quality_attribute) : QRNode(name, config, quality_attribute)
+    {
+    }
+
+};
+class SystemLevelQR : public QRNode
+{
+  public:
+    SystemLevelQR(const std::string& name, const NodeConfig& config, QualityAttribute quality_attribute) : QRNode(name, config, quality_attribute)
+    {
+    }
+
+   
+
+ 
+  protected:
+    void gather_child_metrics()
+      {
+
+        auto node_visitor = [this](TreeNode* node)
+        {
+          if (auto task_qr_node = dynamic_cast<TaskLevelQR*>(node))
+          {
+            if(_quality_attribute == task_qr_node->qa_type()) //If child TaskQR QA matches SystemLevelQR's QA.
+            {
+              double task_qr_metric = task_qr_node->current_metric();
+              std::string task_qr_name = task_qr_node->registrationName();
+              _sub_qr_metrics[task_qr_name] = task_qr_metric;
+            }
+          }
+
+        };
+
+        BT::applyRecursiveVisitor(child_node_, node_visitor);
+      }
+  protected:
+      std::map<std::string, double> _sub_qr_metrics;
+
+    virtual NodeStatus tick() override
+    {
+      setStatus(NodeStatus::RUNNING);
+      const NodeStatus child_status = child_node_->executeTick();
+
+      switch (child_status)
+      {
+        case NodeStatus::SUCCESS: {
+          resetChild();
+          return NodeStatus::SUCCESS;
+        }
+
+        case NodeStatus::FAILURE: {
+          resetChild();
+          return NodeStatus::FAILURE;
+        }
+
+        case NodeStatus::RUNNING: {
+          calculate_measure();
+          return NodeStatus::RUNNING;
+        }
+
+        case NodeStatus::SKIPPED: {
+          return NodeStatus::SKIPPED;
+        }
+        case NodeStatus::IDLE: {
+          throw LogicError("[", name(), "]: A child should not return IDLE");
+        }
+      }
+      return status();
+
+    }
+};
+
+
+
+
+
+
+
+class SearchEfficiencyQR : public TaskLevelQR
+{
+  public:
+    SearchEfficiencyQR(const std::string& name, const NodeConfig& config) : TaskLevelQR(name, config, QualityAttribute::TaskEfficiency)
     {
       _window_start = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
       _last_timestamp = builtin_interfaces::msg::Time();
 
       _water_visibilities = {};
+
+      
   
     }
 

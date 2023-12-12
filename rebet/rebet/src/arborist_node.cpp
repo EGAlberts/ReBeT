@@ -40,6 +40,7 @@
 
 
 #include "rebet/camera_feed_node.h"
+#include "rebet/robot_pose_node.h"
 #include "rebet/sleep_node.h"
 
 
@@ -137,6 +138,7 @@ public:
       registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_client", "navigate_to_pose", "visitObs");
       registerTopicClient<ProvideInitialPose>(factory,"bt_initialpose_pub","initialPose");
       registerTopicClient<CameraFeedNode>(factory,"bt_camera_sub","CameraFeed");
+      registerTopicClient<RobotPoseNode>(factory,"bt_getpose_sub","getRobotPose");
       registerServiceClient<GetMap>(factory,"bt_getmap_cli","getMap");
       registerServiceClient<FindFrontier>(factory,"bt_findfrontier_cli","findFrontier");
       registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_frontier_client", "navigate_to_pose", "visitFrontier");
@@ -149,14 +151,22 @@ public:
       factory.registerNodeType<ObjectDetectionEfficiencyQR>("DetectObjectsEfficiently");
       factory.registerNodeType<PowerQR>("PowerQR");
       factory.registerNodeType<SafetyQR>("SafetyQR");
+      factory.registerNodeType<ObjectDetectionPowerQR>("DetectObjectsSavePower");
+
 
       factory.registerNodeType<MovementEfficiencyQR>("MovementEfficiencyQR");
+      factory.registerNodeType<MovementPowerQR>("MovementPowerQR");
+
 
       factory.registerNodeType<SearchEfficiencyQR>("SearchEfficiencyQR");
       factory.registerNodeType<AdaptPictureRateOnline>("AdaptPictureRate");
+      factory.registerNodeType<AdaptPictureRateOffline>("AdaptPictureRateOff");
+
       factory.registerNodeType<AdaptSpiralAltitudeOnline>("AdaptSpiralAltitude");
       factory.registerNodeType<AdaptThrusterOffline>("AdaptThrusterRecovery");
       factory.registerNodeType<AdaptMaxSpeedOnline>("AdaptMaxSpeed");
+      factory.registerNodeType<AdaptMaxSpeedOffline>("AdaptMaxSpeedOff");
+
       factory.registerNodeType<AdaptChargeConditionOffline>("WhetherToCharge");
       factory.registerNodeType<SetDockLocation>("SetChargingDockLocation");
 
@@ -384,6 +394,28 @@ private:
 
   }
 
+  std::string getStringOrNot(std::string blackboard_key)
+  {
+    bool gotten = false;
+    std::string value_to_get;
+    try
+    {
+      gotten = tree.rootBlackboard()->get<std::string>(blackboard_key,value_to_get);
+    }
+    catch (const std::runtime_error& error)
+    {
+      gotten = false;   
+    }
+
+    if(gotten)
+    {
+      return value_to_get;
+    }
+
+    return blackboard_key + " not available";
+
+  }
+
 
 
 
@@ -413,11 +445,12 @@ private:
     response->key_value = entry_value;
   }
 
-  std::vector<QRNode*> get_tree_qrs()
+  template <class QR_TYPE>
+  std::vector<QR_TYPE*> get_tree_qrs()
   {    
     std::cout << "2 Service to get a qr nodes from the blackboard" << std::endl;
 
-    std::vector<QRNode*> qr_nodes;
+    std::vector<QR_TYPE*> qr_nodes;
 
     for (auto const & sbtree : tree.subtrees) 
     {
@@ -425,7 +458,7 @@ private:
       {
         std::cout << "Node is ?" << node->name() << node->status() << std::endl;
 
-        if(auto qr_node = dynamic_cast<QRNode*>(static_cast<TreeNode*>(node.get())))
+        if(auto qr_node = dynamic_cast<QR_TYPE*>(static_cast<TreeNode*>(node.get())))
         {
           std::cout << "QR node" << std::endl;
 
@@ -440,6 +473,81 @@ private:
     }
     return qr_nodes;
     std::cout << "2 End Service to get a qr nodes from the blackboard " << qr_nodes.size() << std::endl;
+
+  }
+
+  template <class QR_TYPE>
+  void get_metric_from_qrs(std::vector<QR_TYPE*> qr_nodes, std::shared_ptr<GetQR::Response>& response)
+  {    
+    for (auto & node : qr_nodes) 
+        {
+          if(node->status() == NodeStatus::RUNNING) //ensures that the QRs are currently in effect.
+          {
+          auto node_config = node->config();
+
+          auto weight = node_config.input_ports.find(QRNode::WEIGHT);
+          auto metric = node_config.output_ports.find(QRNode::METRIC);
+
+          if (weight == node_config.input_ports.end() || metric == node_config.output_ports.end())
+          {
+            std::stringstream ss;
+            ss << "Either port weight port " << QRNode::WEIGHT << " or metric port " << QRNode::METRIC << " not found within the QR node " << node->registrationName();
+            RCLCPP_ERROR(this->get_logger(), ss.str().c_str());
+            return;
+          }
+
+          auto metric_bb_value = tree.rootBlackboard()->get<double>((std::string)TreeNode::stripBlackboardPointer(metric->second));
+          auto weight_bb_value = tree.rootBlackboard()->get<double>((std::string)TreeNode::stripBlackboardPointer(weight->second));
+
+          QR_MSG qr_msg;
+          qr_msg.qr_name = node->registrationName();
+          qr_msg.metric = metric_bb_value; 
+          qr_msg.weight = weight_bb_value;
+          qr_msg.higher_is_better = node->is_higher_better();
+
+          response->qrs_in_tree.push_back(qr_msg);
+          }
+        }
+  }
+
+  template <class QR_TYPE>
+  bool set_weights_of_qrs(std::vector<QR_MSG> qr_msgs, std::vector<QR_TYPE*> qr_nodes)
+  {    
+    std::string script = "";
+    for (QR_MSG & qr_msg : qr_msgs)
+      {
+        std::string qr_name = qr_msg.qr_name;
+      
+        for (auto & node : qr_nodes) 
+        {
+          if(qr_name == node->registrationName())
+          {
+            auto node_config = node->config();
+
+            auto weight = node_config.input_ports.find(QRNode::WEIGHT);
+
+            if (weight == node_config.input_ports.end())
+            {
+              std::cout << "weight not found" << std::endl;
+              return false;
+            }
+            
+            std::string weight_bb_key = (std::string)TreeNode::stripBlackboardPointer(weight->second);
+
+            script += weight_bb_key;
+            script += ":=";
+            script += std::to_string(qr_msg.weight);
+            script += "; ";
+          }
+
+        }
+
+      }
+
+      script.pop_back();
+      script.pop_back(); //Removing the last '; ' as it isn't necessary.
+
+      return inject_script_node(script);
 
   }
 
@@ -475,35 +583,21 @@ private:
   {
     std::cout << "Service to get a QR nodes from the blackboard" << std::endl;
 
-    auto qr_nodes = get_tree_qrs();
-    for (auto & node : qr_nodes) 
+    std::vector<SystemLevelQR*> sys_qr_nodes = {};
+    std::vector<TaskLevelQR*> tsk_qr_nodes = {};
+
+    if(request->at_system_level)
     {
-      if(node->status() == NodeStatus::RUNNING) //ensures that the QRs are currently in effect.
-      {
-      auto node_config = node->config();
-
-      auto weight = node_config.input_ports.find(QRNode::WEIGHT);
-      auto metric = node_config.output_ports.find(QRNode::METRIC);
-
-      if (weight == node_config.input_ports.end() || metric == node_config.output_ports.end())
-      {
-        std::stringstream ss;
-        ss << "Either port weight port " << QRNode::WEIGHT << " or metric port " << QRNode::METRIC << " not found within the QR node " << node->registrationName();
-        RCLCPP_ERROR(this->get_logger(), ss.str().c_str());
-        return;
-      }
-
-      auto metric_bb_value = tree.rootBlackboard()->get<double>((std::string)TreeNode::stripBlackboardPointer(metric->second));
-      auto weight_bb_value = tree.rootBlackboard()->get<double>((std::string)TreeNode::stripBlackboardPointer(weight->second));
-
-      QR_MSG qr_msg;
-      qr_msg.qr_name = node->registrationName();
-      qr_msg.metric = metric_bb_value; 
-      qr_msg.weight = weight_bb_value;
-
-      response->qrs_in_tree.push_back(qr_msg);
-      }
+      sys_qr_nodes = get_tree_qrs<SystemLevelQR>();
+      get_metric_from_qrs<SystemLevelQR>(sys_qr_nodes, response);
     }
+    else
+    {
+      tsk_qr_nodes = get_tree_qrs<TaskLevelQR>();
+      get_metric_from_qrs<TaskLevelQR>(tsk_qr_nodes, response);
+
+    }
+
     std::cout << "End service to get a QR nodes from the blackboard " << response->qrs_in_tree.size() << std::endl;
 
   }
@@ -550,47 +644,17 @@ private:
   void handle_set_weights(const std::shared_ptr<SetWeights::Request> request,
         std::shared_ptr<SetWeights::Response> response)
   {
-    std::string script = "";
-    auto qr_nodes = get_tree_qrs();
-    auto qr_msgs = request->qrs_to_update;
+    std::vector<SystemLevelQR*> sys_qr_nodes;
+    std::vector<TaskLevelQR*> task_qr_nodes;
 
-
-    for (QR_MSG & qr_msg : qr_msgs)
-    {
-      std::string qr_name = qr_msg.qr_name;
+    sys_qr_nodes = get_tree_qrs<SystemLevelQR>();
     
-      for (auto & node : qr_nodes) 
-      {
-        if(qr_name == node->registrationName())
-        {
-          auto node_config = node->config();
+    task_qr_nodes = get_tree_qrs<TaskLevelQR>();
 
-          auto weight = node_config.input_ports.find(QRNode::WEIGHT);
+    std::vector<rebet_msgs::msg::QR> qr_msgs = request->qrs_to_update;
 
-          if (weight == node_config.input_ports.end())
-          {
-            std::cout << "weight not found" << std::endl;
-            return;
-          }
-          
-          std::string weight_bb_key = (std::string)TreeNode::stripBlackboardPointer(weight->second);
-
-          float weight_as_float = (float)qr_msg.weight;
-          script += weight_bb_key;
-          script += ":=";
-          script += std::to_string(qr_msg.weight);
-          script += "; ";
-        }
-
-      }
-
-    }
-
-    script.pop_back();
-    script.pop_back(); //Removing the last '; ' as it isn't necessary.
-
-    response->success = inject_script_node(script);
-
+    response->success = (set_weights_of_qrs<SystemLevelQR>(qr_msgs,sys_qr_nodes) && set_weights_of_qrs<TaskLevelQR>(qr_msgs,task_qr_nodes));
+ 
   }
 
 
@@ -604,11 +668,16 @@ private:
     feedback->node_status = "placeholder";
 
     std::vector<float> average_safety_qrs = {};
-    std::vector<float> average_power_qrs = {};
+    std::vector<float> average_sys_power_qrs = {};
+    std::vector<float> average_mov_power_qrs = {};
+    std::vector<float> average_tsk_power_qrs = {};
     std::vector<float> average_movement_qrs = {};
     std::vector<float> average_task_qrs = {};
     std::vector<float> safety_qrs = {};
-    std::vector<float> power_qrs = {};
+    std::vector<float> sys_power_qrs = {};
+    std::vector<float> mov_power_qrs = {};
+    std::vector<float> tsk_power_qrs = {};
+
     std::vector<float> movement_qrs = {};
     std::vector<float> task_qrs = {};
 
@@ -679,7 +748,7 @@ private:
           RCLCPP_INFO(this->get_logger(), "Goal finished: Done ticking the tree");
           
           //Reporting on mission
-          std::vector<std::vector<float>> float_report_values = {average_safety_qrs, average_power_qrs, average_movement_qrs, average_task_qrs, safety_qrs, power_qrs, movement_qrs, task_qrs};
+          std::vector<std::vector<float>> float_report_values = {average_safety_qrs, average_sys_power_qrs, average_mov_power_qrs, average_tsk_power_qrs, average_movement_qrs, average_task_qrs, safety_qrs, sys_power_qrs, mov_power_qrs, tsk_power_qrs, movement_qrs, task_qrs};
 
           std::vector<std::string> report_strings = {};
           for (auto const & thing_to_report : float_report_values)
@@ -725,11 +794,15 @@ private:
           // Header
           fout << "timestamp" << ", " 
                << "average_safety_qrs" << ", "
-               << "average_power_qrs" << ", "
+               << "average_sys_power_qrs" << ", "
+               << "average_mov_power_qrs" << ", "
+               << "average_tsk_power_qrs" << ", "
                << "average_movement_qrs" << ", "
                << "average_task_qrs" << ", "
                << "safety_qrs" << ", "
-               << "power_qrs" << ", "
+               << "sys_power_qrs" << ", "
+               << "movement_power_qrs" << ", "
+               << "task_power_qrs" << ", "
                << "movement_qrs" << ", "
                << "task_qrs" << ", "
                << "max_velocities" << ", "
@@ -789,66 +862,50 @@ private:
           {
 
             average_safety_qrs.push_back(getFloatOrNot("safe_mean_metric"));
-            average_power_qrs.push_back(getFloatOrNot("power_mean_metric"));
-            average_movement_qrs.push_back(getFloatOrNot("move_mean_metric"));
+            std::cout << 1;
+            average_sys_power_qrs.push_back(getFloatOrNot("sys_power_mean_metric"));
+            std::cout << 2;
+            average_mov_power_qrs.push_back(getFloatOrNot("move_pow_mean_metric"));
+            std::cout << 3;
+            average_tsk_power_qrs.push_back(getFloatOrNot("obj_pow_mean_metric"));
+            std::cout << 4;
+            average_movement_qrs.push_back(getFloatOrNot("move_eff_mean_metric"));
+            std::cout << 5;
             average_task_qrs.push_back(getFloatOrNot("task_mean_metric"));
+            std::cout << 6;
+
+
             safety_qrs.push_back(getFloatOrNot("safe_metric"));
-            power_qrs.push_back(getFloatOrNot("power_metric"));
-            movement_qrs.push_back(getFloatOrNot("move_metric"));
+            std::cout << 7;
+            
+            sys_power_qrs.push_back(getFloatOrNot("sys_power_metric"));
+            std::cout << 8;
+
+            mov_power_qrs.push_back(getFloatOrNot("move_pow_metric"));
+            std::cout << 9;
+
+            tsk_power_qrs.push_back(getFloatOrNot("obj_power_metric"));
+            std::cout << 10;
+
+
+            movement_qrs.push_back(getFloatOrNot("move_eff_metric"));
+            std::cout << 11;
+
             task_qrs.push_back(getFloatOrNot("task_metric"));
+            std::cout << 2;
 
-            // max_velocities.push_back(tree.rootBlackboard()->get<float>("task_metric"));
 
-            std::string pic_rate_bb;
-            bool pic_rate_present = tree.rootBlackboard()->get<std::string>("pic_rate", pic_rate_bb);
-            if(pic_rate_present)
-            {
-              pic_rates.push_back(pic_rate_bb);
-            }
-            else
-            {
-              pic_rates.push_back("pic_rate_not_present");
-            }
+            pic_rates.push_back(getStringOrNot("pic_rate"));
 
-            std::string max_vel;
-            bool max_vel_present = tree.rootBlackboard()->get<std::string>("max_velocity",max_vel);
-            if(max_vel_present)
-            {
-              max_velocities.push_back(max_vel);
-            }
-            else
-            {
-              max_velocities.push_back("max_vel_not_present");
-            }
-            std::string average_util;
-            bool avg_util_present = tree.rootBlackboard()->get<std::string>("average_utility",average_util);
-            if(avg_util_present)
-            {
-              average_utilities.push_back(average_util);
-            }
-            else
-            {
-              average_utilities.push_back("average_util_not_present");
+           
+            max_velocities.push_back(getStringOrNot("max_velocity"));
 
-            }
 
-            std::string curr_task_name;
-            bool curr_task_present = tree.rootBlackboard()->get<std::string>("current_task",curr_task_name);
-            if(curr_task_present)
-            {
-              task_names.push_back(curr_task_name);
-            }
-            else
-            {
-              task_names.push_back("task_name_not_present");
-            }
-            // float id_time_elapsed = tree.rootBlackboard()->get<float>("id_time_elapsed");
-            // int32_t id_picture_rate = tree.rootBlackboard()->get<int32_t>("id_picture_rate");
-            // float avg_task_metric = tree.rootBlackboard()->get<float>("task_mean_metric");
-            // float avg_power_metric = tree.rootBlackboard()->get<float>("power_mean_metric");
+            average_utilities.push_back(getStringOrNot("average_utility"));
 
-            // int32_t id_det_threshold = tree.rootBlackboard()->get<int32_t>("id_det_threshold");
-            // auto average_utility = tree.rootBlackboard()->get<std::string>("average_utility");
+            task_names.push_back(getStringOrNot("current_task"));
+
+           
           }
         }
       }

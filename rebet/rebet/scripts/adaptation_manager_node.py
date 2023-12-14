@@ -77,7 +77,6 @@ class AdaptationManager(Node):
 
         self.req_sbb = SetBlackboard.Request()
         self.req_sbb.script_code = "average_utility:='"
-        self.req_qr = GetQR.Request()
         self.req_var = GetVariableParams.Request()
 
         self.reporting = [0,0]
@@ -118,13 +117,18 @@ class AdaptationManager(Node):
         return result
 
 
-    def get_system_utility(self):
+    def get_system_utility(self, system_level=False):
         self.get_logger().info("Calling QR service client...")
         
         while not self.cli_qr.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('service not available, waiting again...')
         
-        response = self.cli_qr.call(self.req_qr)
+        req_qr = GetQR.Request()
+        
+        req_qr.at_system_level = system_level
+
+
+        response = self.cli_qr.call(req_qr)
 
         self.get_logger().info('Result of QRS in tree ' + str(response.qrs_in_tree))
 
@@ -140,7 +144,10 @@ class AdaptationManager(Node):
             normalized_value = self.dynamic_bounding(qr.metric, self.bounds_dict[qr.qr_name])
             self.get_logger().info("Bounds dict: " + str(self.bounds_dict))
             self.get_logger().info("Metric value vs. normalized value " + str(qr.metric) + " vs. " + str(normalized_value))
+            
 
+            if(qr.higher_is_better == False):
+               normalized_value = 1 - normalized_value
             qr_val = QRValue()
             qr_val.name = qr.qr_name
             qr_val.qr_fulfilment = (qr.weight/weight_sum) * normalized_value
@@ -334,21 +341,21 @@ class AdaptationManager(Node):
 
         for adaptation_to_execute in request.adaptations:
             adaptation_results = []
-            type_of_adaptation = adaptation_to_execute.adaptation_type
+            target_of_adaptation = adaptation_to_execute.adaptation_target
 
-            if(type_of_adaptation is None): 
+            if(target_of_adaptation is None): 
                 self.get_logger().error("Unknown or unspecified type of adaptation")
                 response.success = False
                 return response
 
 
-            if(type_of_adaptation == Adaptation.STATETRANSITION):
+            if(target_of_adaptation == Adaptation.STATETRANSITION):
                 self.get_logger().info('\n\n ros_lc adaptation \n\n')
                 is_exec_success = self.execute_lc_adaptation(adaptation_to_execute.lifecycle_adaptation,adaptation_to_execute.node_name)                
-            elif(type_of_adaptation == Adaptation.ROSPARAMETER):
+            elif(target_of_adaptation == Adaptation.ROSPARAMETER):
                 self.get_logger().info('\n\n ros_param adaptation \n\n')
                 is_exec_success = self.execute_rp_adaptation(adaptation_to_execute.parameter_adaptation,adaptation_to_execute.node_name)
-            elif(type_of_adaptation == Adaptation.BLACKBOARDENTRY):
+            elif(target_of_adaptation == Adaptation.BLACKBOARDENTRY):
                 self.get_logger().info('\n\n blackboard adaptation \n\n')
                 is_exec_success = self.execute_bb_adaptation(adaptation_to_execute.blackboard_adaptation)
 
@@ -371,14 +378,19 @@ class AdaptationManager(Node):
 
         response.success = False
         adapt_state = AdaptationState()
+        
+        adaptation_at_system_level = "system" in task_identifier #TODO: make this more robust.
+            
 
-        adapt_state.qr_values = self.get_system_utility()
+        adapt_state.qr_values = self.get_system_utility(adaptation_at_system_level)
         self.get_logger().info('\n\n sys util \n\n')
 
         adapt_state.system_possible_configurations = self.make_configurations(request.adaptation_space)
 
         self.get_logger().info(str(adapt_state.system_possible_configurations))
         
+
+
         
         # all_the_qrs = []
 
@@ -400,7 +412,7 @@ class AdaptationManager(Node):
 
             self.task_to_strategy_map[task_identifier] = create_strategy(self.task_to_strategy_map[task_identifier].get_name())
         else:
-            self.get_logger().info('\n\n REUSE OF STRATEGY \n\n')
+            self.get_logger().info('\n\n REUSE OF STRATEGY FOR TASK:' + task_identifier+'\n\n')
 
 
 

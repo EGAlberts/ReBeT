@@ -72,7 +72,20 @@ std::vector<std::vector<std::vector<double>>> find_groups(std::vector<std::vecto
     return groups;
 }
 
+bool filter_out_errors(std::vector<double> & pt)
+{
+    
+    if(pt[0] > 1.8 || pt[0] < -1.8)
+    {
+        return false;
+    }
+    if(pt[1] > 1.8 || pt[1] < -1.8)
+    {
+        return false;
+    }
+    return true;
 
+}
 
 class FilterObstacles : public BT::SyncActionNode
 {
@@ -80,6 +93,7 @@ public:
     static constexpr const char* OBS_POS = "obstacle_positions";
     static constexpr const char* OBS_NUM = "obstacle_number";
     static constexpr const char* MAP_IN = "map_to_filter";
+    static constexpr const char* POSE_IN = "in_pose";
 
 
     FilterObstacles(const std::string & instance_name,
@@ -94,7 +108,8 @@ public:
     PortsList child_ports = { 
                 InputPort<nav_msgs::msg::OccupancyGrid>(MAP_IN),
                 OutputPort<std::vector<PoseStamped>>(OBS_POS),
-                OutputPort<int>(OBS_NUM)
+                OutputPort<int>(OBS_NUM),
+                InputPort<Odometry>(POSE_IN),
             };
 
     return child_ports;
@@ -197,16 +212,19 @@ public:
 
         for (std::vector<double> & pt : points_to_visit)
         {
-            PoseStamped pose;
-            pose.header.frame_id = "map";
-            pose.pose.position.x = pt[0];
-            pose.pose.position.y = pt[1];
-            std::vector<double> q = quaternion_from_euler_again(0, 0, pt[2]);
-            pose.pose.orientation.x = q[0];
-            pose.pose.orientation.y = q[1];
-            pose.pose.orientation.z = q[2];
-            pose.pose.orientation.w = q[3];
-            route_poses.push_back(pose);
+            if(filter_out_errors(pt))
+            {
+                PoseStamped pose;
+                pose.header.frame_id = "map";
+                pose.pose.position.x = pt[0];
+                pose.pose.position.y = pt[1];
+                std::vector<double> q = quaternion_from_euler_again(0, 0, pt[2]);
+                pose.pose.orientation.x = q[0];
+                pose.pose.orientation.y = q[1];
+                pose.pose.orientation.z = q[2];
+                pose.pose.orientation.w = q[3];
+                route_poses.push_back(pose);
+            }
         }
 
 
@@ -218,9 +236,14 @@ public:
 
         double min_dist = 9999999.0;
         PoseStamped min_point;
+
+
+        Odometry odom_obj;
+
+        getInput(POSE_IN,odom_obj);
         for (PoseStamped & rt_pose : route_poses)
         {
-            double dist_from_origin = euclidean_distance(-2.0, -0.5,rt_pose.pose.position.x,rt_pose.pose.position.y);
+            double dist_from_origin = euclidean_distance(odom_obj.pose.pose.position.x, odom_obj.pose.pose.position.y, rt_pose.pose.position.x,rt_pose.pose.position.y);
 
             if(dist_from_origin < min_dist)
             {
@@ -257,10 +280,13 @@ public:
             route_poses.erase(std::remove(route_poses.begin(), route_poses.end(), re_min_point), route_poses.end());
         }
 
-        for (const auto& pose : reordered_visiting) {
-            std::stringstream ss;
+        std::stringstream ss;
+
+        for (const auto& pose : reordered_visiting) {    
             ss << "(x: " << pose.pose.position.x << ", y: " << pose.pose.position.y << ")" << std::endl;
         }
+
+        std::cout << ss.str() << std::endl;
 
         setOutput(OBS_POS, reordered_visiting);
         setOutput(OBS_NUM, (int)reordered_visiting.size());

@@ -40,7 +40,7 @@ class TreeActionClient(Node):
     
     def feedback_callback(self, feedback_msg):
         feedback = feedback_msg.feedback
-        self.get_logger().info('Received feedback: {0}'.format(feedback.node_status))
+        self.get_logger().info('Received feedback: {0}'.format(feedback.node_status),throttle_duration_sec=1)
 
 
 

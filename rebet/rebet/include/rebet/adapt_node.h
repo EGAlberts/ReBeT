@@ -1176,7 +1176,7 @@ class AdaptThrusterOffline : public AdaptOnConditionOnRunning<double>
 
           rebet_msgs::msg::Adaptation adap;
 
-          adap.adaptation_type = static_cast<int8_t>(AdaptationTarget::LifecycleTransition);
+          adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::LifecycleTransition);
           adap.lifecycle_adaptation = transition;
           adap.node_name = node_name;
 
@@ -1192,7 +1192,7 @@ class AdaptThrusterOffline : public AdaptOnConditionOnRunning<double>
 
           rebet_msgs::msg::Adaptation adap;
 
-          adap.adaptation_type = static_cast<int8_t>(AdaptationTarget::LifecycleTransition);
+          adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::LifecycleTransition);
           adap.lifecycle_adaptation = transition;
           adap.node_name = node_name;
 

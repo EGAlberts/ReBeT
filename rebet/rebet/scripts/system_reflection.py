@@ -154,9 +154,16 @@ class SystemReflection(Node):
                 self.req.sys_attributes.append(new_sys_att)
 
         if(len(self.req.sys_attributes) > 0):
+            self.get_logger().info("Trying to call set att...")
+
+            while not self.cli.wait_for_service(timeout_sec=1.0):
+                    self.get_logger().info('service not available, waiting again...')
             response = self.cli.call(self.req)
             self.get_logger().info('Result of call to set attribute in blackboard ' + str(response.success))
             self.req.sys_attributes = []
+
+        self.get_logger().info("Finish sys reflec calls...")
+        
 
 
         

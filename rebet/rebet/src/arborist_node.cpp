@@ -679,7 +679,10 @@ private:
     std::vector<float> tsk_power_qrs = {};
 
     std::vector<float> movement_qrs = {};
+    std::vector<float> out_pic_rates = {};
     std::vector<float> task_qrs = {};
+    std::vector<std::string> task_qr_states = {};
+
 
     std::vector<std::string> max_velocities = {};
     std::vector<std::string> pic_rates = {};
@@ -722,6 +725,15 @@ private:
 
         result_of_tick = NodeStatus::FAILURE;
       }
+      catch (const rclcpp_action::exceptions::UnknownGoalHandleError ros_error)
+      {
+        RCLCPP_INFO(this->get_logger(), "Tree failed because of unknown goal handle error.");
+        RCLCPP_ERROR(this->get_logger(), ros_error.what());
+
+        result_of_tick = NodeStatus::RUNNING;
+
+
+      }
 
       feedback->node_status = toStr(result_of_tick) + " " + std::to_string(total_elapsed);
       // Publish feedback
@@ -748,7 +760,7 @@ private:
           RCLCPP_INFO(this->get_logger(), "Goal finished: Done ticking the tree");
           
           //Reporting on mission
-          std::vector<std::vector<float>> float_report_values = {average_safety_qrs, average_sys_power_qrs, average_mov_power_qrs, average_tsk_power_qrs, average_movement_qrs, average_task_qrs, safety_qrs, sys_power_qrs, mov_power_qrs, tsk_power_qrs, movement_qrs, task_qrs};
+          std::vector<std::vector<float>> float_report_values = {average_safety_qrs, average_sys_power_qrs, average_mov_power_qrs, average_tsk_power_qrs, average_movement_qrs, average_task_qrs, safety_qrs, sys_power_qrs, mov_power_qrs, tsk_power_qrs, movement_qrs, out_pic_rates, task_qrs};
 
           std::vector<std::string> report_strings = {};
           for (auto const & thing_to_report : float_report_values)
@@ -763,7 +775,7 @@ private:
             report_strings.push_back(value_as_string);
           }
 
-          std::vector<std::vector<std::string>> string_report_values = {max_velocities, pic_rates, average_utilities, task_names};
+          std::vector<std::vector<std::string>> string_report_values = {task_qr_states, max_velocities, pic_rates, average_utilities, task_names};
 
           for (auto const & thing_to_report : string_report_values)
           {
@@ -804,7 +816,9 @@ private:
                << "movement_power_qrs" << ", "
                << "task_power_qrs" << ", "
                << "movement_qrs" << ", "
+               << "out_pic_rates" << ", "
                << "task_qrs" << ", "
+               << "task_qr_state" << ", "
                << "max_velocities" << ", "
                << "pic_rates" << ", "
                << "average_utilities" << ", "
@@ -860,6 +874,9 @@ private:
 
           if(bt_name == "frog.xml")
           {
+            std::string charge_status = getStringOrNot("charge_or_not");
+
+            std::cout << "CHARGE STATUS: " << charge_status << std::endl;
 
             average_safety_qrs.push_back(getFloatOrNot("safe_mean_metric"));
             std::cout << 1;
@@ -890,11 +907,15 @@ private:
 
             movement_qrs.push_back(getFloatOrNot("move_eff_metric"));
             std::cout << 11;
+    
+            out_pic_rates.push_back(getFloatOrNot("elastic_pic"));
+            std::cout << 2;
 
             task_qrs.push_back(getFloatOrNot("task_metric"));
             std::cout << 2;
 
 
+            task_qr_states.push_back(getStringOrNot("obj_task_state"));
             pic_rates.push_back(getStringOrNot("pic_rate"));
 
            

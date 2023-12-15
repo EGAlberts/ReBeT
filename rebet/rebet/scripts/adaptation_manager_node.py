@@ -153,9 +153,14 @@ class AdaptationManager(Node):
             qr_val.qr_fulfilment = (qr.weight/weight_sum) * normalized_value
             all_the_qrs.append(qr_val)
 
+        
+        return all_the_qrs
+    
+
+    def report_on_system(self, all_the_qrs):
         self.req_sbb.script_code = ""
         for key in list(self.reporting_dict.keys()):
-            if(str(key) != "pic_rate"):
+            if((str(key) != "pic_rate") and (str(key) != "charge_or_not")):
                 if(str(key) == "max_velocity"):
                     rep_val = str(self.reporting_dict[key][0])
                 else:
@@ -179,10 +184,6 @@ class AdaptationManager(Node):
 
         res = self.cli_sbb.call(self.req_sbb)
         self.get_logger().info("Put this in the whiteboard for average utility " + str(self.reporting[0]/self.reporting[1]) + " with res " + str(res.success))
-
-        
-        return all_the_qrs
-    
     def make_configurations(self, adaptation_options_list):
         param_to_node = {}
         param_to_target = {}
@@ -235,8 +236,11 @@ class AdaptationManager(Node):
     def execute_bb_adaptation(self, param_msg): 
 
         req_bb_exec = SetParameterInBlackboard.Request()
+
+        self.get_logger().info("\n\n\nparam type \n\n\n" + str(param_msg.value.type))
         if type(param_msg) is not list:
             param_msg = [param_msg]
+
 
 
         for par in param_msg:
@@ -268,6 +272,7 @@ class AdaptationManager(Node):
 
         client = self.set_parameter_client_dict[node_name]
         
+
         if type(param_msg) is not list:
             param_msg = [param_msg]
 
@@ -289,7 +294,8 @@ class AdaptationManager(Node):
         if(not all([res.successful for res in response.results])):
             self.get_logger().warning('One or more requests to set a parameter were unsuccessful in the Adaptation Manager, see reason(s):' + str(response.results))
             return False
-            
+        
+        self.get_logger().info('ros param adaptation complete.')
         return True
     
     def execute_lc_adaptation(self, transition, node_name):
@@ -338,7 +344,11 @@ class AdaptationManager(Node):
         # rebet_msgs/Adaptation[] adaptation
         # ---
         # bool success
+        self.get_logger().info('\n\n offline adaptation \n\n')
+        
+        self.get_logger().info(str(request.adaptations))
 
+        self.report_on_system([])
         for adaptation_to_execute in request.adaptations:
             adaptation_results = []
             target_of_adaptation = adaptation_to_execute.adaptation_target
@@ -383,6 +393,8 @@ class AdaptationManager(Node):
             
 
         adapt_state.qr_values = self.get_system_utility(adaptation_at_system_level)
+
+        self.report_on_system(adapt_state.qr_values)
         self.get_logger().info('\n\n sys util \n\n')
 
         adapt_state.system_possible_configurations = self.make_configurations(request.adaptation_space)

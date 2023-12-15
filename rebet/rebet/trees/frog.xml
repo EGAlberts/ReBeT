@@ -5,7 +5,7 @@
 
 
 	<Sequence>
-		<Script code="charge_or_not='no_charge'; pic_rate:=5; task_weight:=1.0; task_metric:=1.0; obj_power_weight:=1.0; obj_power_metric:=1.0; sys_power_weight:=1.0; sys_power_metric:=1.0; move_pow_weight:=1.0; move_pow_metric:=1.0; move_eff_weight:=1.0; move_eff_metric:=1.0; safe_weight:=1.0; safe_metric:=1.0"/>
+		<Script code="charge_or_not='no_charge'; pic_rate:=3; task_weight:=1.0; task_metric:=1.0; obj_power_weight:=1.0; obj_power_metric:=1.0; sys_power_weight:=1.0; sys_power_metric:=1.0; move_pow_weight:=1.0; move_pow_metric:=1.0; move_eff_weight:=1.0; move_eff_metric:=1.0; safe_weight:=1.0; safe_metric:=1.0"/>
 		
 		<RetryUntilSuccessful num_attempts="-1">
 			<getRobotPose topic_name="/odom" out_pose="{current_pose}" />
@@ -19,10 +19,14 @@
 				<Inverter>
 					<Sequence>
 						<RetryUntilSuccessful num_attempts="-1">
-						<getMap service_name="/slam_toolbox/dynamic_map" map_retrieved="{current_map}"/>
+							<getMap service_name="/slam_toolbox/dynamic_map" map_retrieved="{current_map}"/>
+						</RetryUntilSuccessful>
+
+						<RetryUntilSuccessful num_attempts="-1">
+							<getRobotPose topic_name="/odom" out_pose="{current_pose}" />
 						</RetryUntilSuccessful>
 						
-						<findFrontier service_name="/get_furthest_frontier" in_odom="{odometry}" map_to_find_frontier="{current_map}" frontier_positions="{front_poses}"/>
+						<findFrontier service_name="/get_furthest_frontier" in_odom="{current_pose}" map_to_find_frontier="{current_map}" frontier_positions="{front_poses}"/>
 						
 						<ForceSuccess>
 							<visitFrontier poses="{front_poses}" name_of_task="{current_task}"/>
@@ -45,52 +49,59 @@
 		
 		<Repeat num_cycles="-1">
 			<PowerQR weight="{sys_power_weight}" metric="{sys_power_metric}" mean_metric="{sys_power_mean_metric}">
-			<WhetherToCharge power_consumed="{sys_power_metric}" adaptation_subject="charge_or_not" >
-			<Switch2 variable="{charge_or_not}" case_1="charge" case_2="no_charge">
-				<Sequence>
-					<SetChargingDockLocation dock_position="{charge_poses}"/>
-					<RetryUntilSuccessful num_attempts="-1">
-						<visitChargingDock poses="{charge_poses}" name_of_task="{current_task}"/>
-					</RetryUntilSuccessful>
-					<Sleep msec="10000"/>
-					<SetBlackboard value="no_charge" output_key="charge_or_not" />
-				</Sequence>
+		
 				
 				<Sequence>
 							<Repeat num_cycles="{num_obstacles}">
 								<Sequence>
-								<SafetyQR weight="{safe_weight}" metric="{safe_metric}" mean_metric="{safe_mean_metric}" in_laser_scan="{laser_scan}">
-									<MovementPowerQR weight="{move_pow_weight}" metric="{move_pow_metric}" mean_metric="{move_pow_mean_metric}" in_odom="{odometry}"> 
-										<MovementEfficiencyQR weight="{move_eff_weight}" metric="{move_eff_metric}" mean_metric="{move_eff_mean_metric}" in_odom="{odometry}"> 
-											<AdaptMaxSpeedOff adaptation_period="3" adaptation_subject="max_velocity" subject_location="velocity_smoother" in_power="{move_pow_metric}" in_safety="{safe_metric}" in_movement="{move_pow_metric}" >
-												<ForceSuccess>
-													<visitObs poses="{route_poses}" name_of_task="{current_task}"/>
-												</ForceSuccess>
-											</AdaptMaxSpeedOff>
-										</MovementEfficiencyQR>
-									</MovementPowerQR> 
+									<SafetyQR weight="{safe_weight}" metric="{safe_metric}" mean_metric="{safe_mean_metric}" in_laser_scan="{laser_scan}">
+										<MovementPowerQR weight="{move_pow_weight}" metric="{move_pow_metric}" mean_metric="{move_pow_mean_metric}" in_odom="{odometry}"> 
+											<MovementEfficiencyQR weight="{move_eff_weight}" metric="{move_eff_metric}" mean_metric="{move_eff_mean_metric}" in_odom="{odometry}"> 
+												<AdaptMaxSpeedOff adaptation_period="3" adaptation_subject="max_velocity" subject_location="velocity_smoother" in_power="{move_pow_metric}" in_safety="{safe_metric}" in_movement="{move_pow_metric}" >
+													<ForceSuccess>
+														<visitObs poses="{route_poses}" name_of_task="{current_task}"/>
+													</ForceSuccess>
+												</AdaptMaxSpeedOff>
+											</MovementEfficiencyQR>
+										</MovementPowerQR> 
+									</SafetyQR>
 
-								</SafetyQR>
-								<DetectObjectsSavePower weight="{obj_power_weight}" metric="{obj_power_metric}" objs_identified="{objects_detected}" mean_metric="{obj_pow_mean_metric}">
-								<DetectObjectsEfficiently weight="{task_weight}" objs_identified="{objects_detected}" metric="{task_metric}" mean_metric="{task_mean_metric}" >
-									<AdaptPictureRateOff adaptation_subject="pic_rate" in_power="{obj_power_metric}" in_pictask="{task_metric}" >
-										<Repeat num_cycles="{pic_rate}">
-											<Sequence>
-													<RetryUntilSuccessful num_attempts="-1">
-														<CameraFeed latest_image="{image_feed}" topic_name="/camera/image_raw"/>
-													</RetryUntilSuccessful>
-													<identifyObject in_camera_image="{image_feed}" objs_identified="{objects_detected}" name_of_task="{current_task}"/>
-											</Sequence>
-										</Repeat>
-									</AdaptPictureRateOff>
-								</DetectObjectsEfficiently>
-								</DetectObjectsSavePower>
+									<Repeat num_cycles="{pic_rate}">
+										<DetectObjectsSavePower weight="{obj_power_weight}" metric="{obj_power_metric}" objs_identified="{objects_detected}" mean_metric="{obj_pow_mean_metric}">
+											<DetectObjectsEfficiently weight="{task_weight}" objs_identified="{objects_detected}" metric="{task_metric}" mean_metric="{task_mean_metric}" out_state="{obj_task_state}" >
+												<AdaptPictureRateOff adaptation_subject="pic_rate" in_power="{obj_power_metric}" in_pictask="{task_metric}" obstacles_total="{num_obstacles}" in_pictask_state="{obj_task_state}" out_pic_rate="{elastic_pic}">
+													<Sequence>
+														<RetryUntilSuccessful num_attempts="-1">
+															<CameraFeed latest_image="{image_feed}" topic_name="/camera/image_raw"/>
+														</RetryUntilSuccessful>
+														<identifyObject in_camera_image="{image_feed}" objs_identified="{objects_detected}" name_of_task="{current_task}"/>
+													</Sequence>
+												</AdaptPictureRateOff>
+											</DetectObjectsEfficiently>
+										</DetectObjectsSavePower>
+									</Repeat>
+									<WhetherToCharge power_consumed="{sys_power_metric}" adaptation_subject="charge_or_not" >
+										<Switch2 variable="{charge_or_not}" case_1="charge" case_2="no_charge">
+										<Sequence>
+											<SetChargingDockLocation dock_position="{charge_poses}"/>
+											<RetryUntilSuccessful num_attempts="-1">
+												<visitChargingDock poses="{charge_poses}" name_of_task="{current_task}"/>
+											</RetryUntilSuccessful>
+											<Sleep msec="10000"/>
+											<SetBlackboard value="no_charge" output_key="charge_or_not" />
+											<Sleep msec="1000"/>
+
+										</Sequence>
+										<AlwaysSuccess/>
+										<SetBlackboard value="no_charge" output_key="charge_or_not" />
+										</Switch2>
+									</WhetherToCharge>
+
+
 								</Sequence>
 							</Repeat>
 				</Sequence>
-				<SetBlackboard value="charge" output_key="charge_or_not" />
-			</Switch2>
-			</WhetherToCharge>
+				
 
 			</PowerQR>
 		</Repeat>

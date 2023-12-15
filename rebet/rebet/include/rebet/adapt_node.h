@@ -96,6 +96,7 @@ protected:
       else if constexpr (std::is_same_v<AdaptationService, rebet_msgs::srv::OfflineAdaptation>)
       {
         request->adaptations = _offline_adaptations;
+        std::cout << "offline adap sent type " << _offline_adaptations[0].parameter_adaptation.value.type << std::endl;
         offline_future_response_ = client->async_send_request(request).share();
       }
     }
@@ -295,7 +296,7 @@ class AdaptOnConditionOnStart : public AdaptOnCondition<ParamT>, public virtual 
         {
           if( (node_->now() - time_request_sent_) > timeout )
           {
-            throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly?"); 
+            throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly? " + this->registrationName()); 
           }
           else{
             return NodeStatus::RUNNING;
@@ -395,7 +396,7 @@ class AdaptOnConditionOnStart : public AdaptOnCondition<ParamT>, public virtual 
   protected:
     rclcpp::executors::SingleThreadedExecutor callback_group_executor_;
     bool _condition_was_true;
-    std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(1000);
+    std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(ADAP_SERVICE_TIMEOUT_MILLISECOND);
     bool response_received_ = false;
     rclcpp::Time time_request_sent_;
 
@@ -529,7 +530,7 @@ class AdaptOnConditionOnRunning : public AdaptOnCondition<ParamT>, public virtua
         {
           if( (node_->now() - time_request_sent_) > timeout )
           {
-            throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly?"); 
+            throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly? " + this->registrationName()); 
           }
           else{
             return NodeStatus::RUNNING;
@@ -622,7 +623,7 @@ class AdaptOnConditionOnRunning : public AdaptOnCondition<ParamT>, public virtua
   }
 
     private:
-      std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(1000);
+      std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(ADAP_SERVICE_TIMEOUT_MILLISECOND);
       bool response_received_ = false;
       rclcpp::Time time_request_sent_;
       bool request_sent_ = false;
@@ -741,7 +742,7 @@ class AdaptOnConditionOnSuccess : public AdaptOnCondition<ParamT>, public virtua
             {
               if( (node_->now() - time_request_sent_) > timeout )
               {
-                throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly?"); 
+                throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly? " + this->registrationName()); 
               }
               else{
                 return NodeStatus::RUNNING;
@@ -832,7 +833,7 @@ class AdaptOnConditionOnSuccess : public AdaptOnCondition<ParamT>, public virtua
   }
 
     private:
-      std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(1000);
+      std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(ADAP_SERVICE_TIMEOUT_MILLISECOND);
       bool response_received_ = false;
       rclcpp::Time time_request_sent_;
       bool request_sent_ = false;
@@ -962,7 +963,7 @@ class AdaptOnConditionOnFailure : public AdaptOnCondition<ParamT>, public virtua
 
               if( (node_->now() - time_request_sent_) > timeout )
               {
-                throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly?"); 
+                throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly?" + this->registrationName()); 
               }
             }
             else
@@ -1042,7 +1043,7 @@ class AdaptOnConditionOnFailure : public AdaptOnCondition<ParamT>, public virtua
   }
 
     private:
-      std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(1000);
+      std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(ADAP_SERVICE_TIMEOUT_MILLISECOND);
       bool response_received_ = false;
       rclcpp::Time time_request_sent_;
       bool request_sent_ = false;

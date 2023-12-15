@@ -8,7 +8,8 @@
 #include <string>
 #include <vector>
 #include <cmath>
-
+#include <queue>
+#include <deque>
 
 
 std::vector<double> quaternion_from_euler(double ai, double aj, double ak) 
@@ -30,5 +31,23 @@ std::vector<double> quaternion_from_euler(double ai, double aj, double ak)
     return {cj*sc - sj*cs, cj*ss + sj*cc, cj*cs - sj*sc, cj*cc + sj*ss};
 }
 
+
+inline constexpr int ADAP_SERVICE_TIMEOUT_MILLISECOND = 2000;
+
+//https://stackoverflow.com/questions/56334492/c-create-fixed-size-queue
+template <typename T, int MaxLen, typename Container=std::deque<T>>
+class FixedQueue : public std::queue<T, Container> {
+public:
+
+    const Container& getContainer() const {
+        return this->c;
+    }
+    void push(const T& value) {
+        if (this->size() == MaxLen) {
+           this->c.pop_front();
+        }
+        std::queue<T, Container>::push(value);
+    }
+};
 
 #endif  // rebet__REBET_UTILS_HPP_

@@ -13,6 +13,7 @@
 #include "rebet/system_attribute_value.hpp"
 #include "rebet/qr_node.h"
 
+#include "rebet_frog/frog_constants.hpp"
 
 namespace BT
 {
@@ -75,6 +76,14 @@ class ObjectDetectionEfficiencyQR : public TaskLevelQR
 
       if(objects_msg.stamp != _last_timestamp)
       {
+          if(objects_msg.object_detected)
+          {
+            setOutput(QR_STATE,detected);
+          }
+          else
+          {
+            setOutput(QR_STATE,not_detected);
+          }
         num_obj_det_curr_exec+=objects_msg.object_names.size();
         pictures_taken+=1.0;
         _last_timestamp = objects_msg.stamp;
@@ -117,6 +126,10 @@ class ObjectDetectionEfficiencyQR : public TaskLevelQR
     }
 
     private:
+      std::string detected = std::string(OBJECT_DETECTED_STRING);
+      std::string not_detected = std::string(OBJECT_NOT_DETECTED_STRING);
+
+
       int num_obj_det_curr_exec;
       builtin_interfaces::msg::Time _last_timestamp;
       const double MAX_DETECTABLE = 7.0; //Corresponds to the max picture rate assuming one object is detected per picture on average..
@@ -226,7 +239,7 @@ class ObjectDetectionPowerQR : public TaskLevelQR
       builtin_interfaces::msg::Time _obj_last_timestamp;
 
 
-      const float DETECTION_AVG_POW = 10.919800; //watts
+      
 
 
 
@@ -273,12 +286,15 @@ class MovementPowerQR : public TaskLevelQR
         nav_msgs::msg::Odometry odom_msg = _odom_attribute.get<rebet::SystemAttributeType::ATTRIBUTE_ODOM>();
         float linear_speed = hypot(fabs(odom_msg.twist.twist.linear.x), fabs(odom_msg.twist.twist.linear.y));
 
+
         if( (odom_msg.header.stamp.sec-_odom_last_timestamp_sec) >= 1 ) //one second has passed since last odom
         {
+          std::cout << "fresh odom in movement power QR" << std::endl;
           _metric = calculate_power_motion(linear_speed);
           output_metric();
           metric_mean();
           setOutput(MEAN_METRIC,_average_metric);
+          std::cout << "metric in  mov power QR " << _metric << std::endl;
 
           _odom_last_timestamp_sec = odom_msg.header.stamp.sec; 
         }
@@ -566,7 +582,6 @@ class SafetyQR : public TaskLevelQR
       if(res)
       {
         _laser_msg = _laser_attribute.get<rebet::SystemAttributeType::ATTRIBUTE_LASER>();
-
         if(_laser_msg.header.stamp != _obj_last_timestamp)
         {
           _obj_last_timestamp = _laser_msg.header.stamp; 
@@ -587,28 +602,29 @@ class SafetyQR : public TaskLevelQR
           }
 
           _fitted_nearest = (nearest_object - laser_min) / (laser_max - laser_min);
+
+          std::cout << "fitted nearest " << _fitted_nearest << std::endl;
+
+          _metric = std::clamp(_fitted_nearest,0.0f,1.0f);
+
+          std::cout << "metric in safety " << _metric << std::endl; 
+
+          auto curr_time_pointer = std::chrono::system_clock::now();
+
+          int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
+
+          output_metric();
+          metric_mean();
+
+          setOutput(MEAN_METRIC,_average_metric);
         }
 
       }
 
 
       
-      _metric = std::clamp(_fitted_nearest,0.0f,1.0f);
+     
 
-      auto curr_time_pointer = std::chrono::system_clock::now();
-
-      int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
-      int elapsed_seconds = current_time-_window_start;
-
-      // if(elapsed_seconds >= _window_length)
-      // {
-      output_metric();
-      metric_mean();
-
-      setOutput(MEAN_METRIC,_average_metric);
-
-      _window_start = current_time;
-      // }
 
     }
   private:

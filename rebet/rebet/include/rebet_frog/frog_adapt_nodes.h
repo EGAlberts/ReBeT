@@ -12,6 +12,10 @@
 #include "rcl_interfaces/msg/parameter_value.hpp"
 #include "lifecycle_msgs/msg/transition.hpp"
 #include "rebet/adapt_node.h"
+#include "rebet/rebet_utilities.hpp"
+
+#include "rebet_frog/frog_constants.hpp"
+
 
 namespace BT
 {
@@ -50,8 +54,34 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
     {
       _condition_default = true;
       registerAdaptations();
+      _pictures_taken = 0;
+      _power_consumed = 0.0;
+
+      
+      
+
+      // auto resetCallback = [this](TimePoint timestamp, const TreeNode& node,
+      //                                   NodeStatus prev, NodeStatus status) {
+      //     std::cout << "\n\n STATUS CHANGED CALLBACK CALLED STATUS IS " << status << std::endl;
+      //     if ((status == NodeStatus::IDLE))
+      //     {
+
+      //       this->_pictures_taken = 0;
+      //       this->_power_consumed = 0.0;
+      //       this->_obs_taken_pictures_of = 0;
+      //     }
+      //   };
+      // this->subscribeToStatusChange(std::move(resetCallback));
 
       //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.  
+    }
+
+    void resetTracking()
+    {
+        std::cout << "\n\n\n RRESET TRACKING \n\n\n" << std::endl;
+      _pictures_taken = 0;
+      _power_consumed = 0.0;
+      _obs_taken_pictures_of = 0;
     }
 
     static PortsList providedPorts()
@@ -59,6 +89,11 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
       PortsList base_ports = AdaptOnConditionOnStart::providedPorts();
 
       PortsList child_ports =  {
+        InputPort<double>(POW_IN,"the power metric"),
+        InputPort<double>(PICTASK_IN,"the det obj task metric"),
+        InputPort<std::string>(TASK_STATE,"state of the det obj task metric"),
+        InputPort<int>(TOT_OBS, "how many obstacles there are"),
+        OutputPort<int>(OUT_PIC, "elastic picture rate")
               };
       child_ports.merge(base_ports);
 
@@ -67,14 +102,21 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
 
     void pic_adaptation_msg(int pic_rate)
     {
+
+      std::cout << "pic rate being put into adaptation msg " << pic_rate << std::endl; 
+      setOutput(OUT_PIC, pic_rate);
       std::string param_name;
 
+      _current_pic_rate = pic_rate;
       getInput(ADAP_SUB, param_name);
 
       rebet_msgs::msg::Adaptation adap;
       rclcpp::Parameter adap_param = rclcpp::Parameter(param_name,rclcpp::ParameterValue(pic_rate));
+
+      std::cout << "type name " << adap_param.get_type_name() << std::endl;
+
       adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::BlackboardEntry);
-      adap.parameter_adaptation = adap_param.to_parameter_msg();
+      adap.blackboard_adaptation = adap_param.to_parameter_msg();
 
       _offline_adaptations.push_back(adap);
 
@@ -88,6 +130,8 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
 
       if(new_pic_rate < MIN_PIC_INCREMENT)
       {
+        std::cout << " pic rate decrease not possible " << std::endl;
+
         return false;
       }
 
@@ -96,50 +140,160 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
       return true;
     }
 
-    bool increase_pic_rate()
+    void increase_pic_rate()
     {
       _offline_adaptations = {};
 
       int new_pic_rate = _current_pic_rate + PIC_INCREMENT;
 
-      if(new_pic_rate > MAX_PIC_INCREMENT)
-      {
-        return false;
-      }
+      
 
       pic_adaptation_msg(new_pic_rate);
 
-      return true;
+    }
+
+    void set_pic_rate(int new_pic_rate)
+    {
+      _offline_adaptations = {};
+
+      pic_adaptation_msg(new_pic_rate);
+
     }
 
     virtual bool evaluate_condition() override
     {
+      //By virtue of being called, it means a picture has been taken
+      _pictures_taken+=1;
+
       double current_power;
-      double current_pic_task;
-      auto pow_res = getInput(POW_IN, current_power);
-      auto tsk_res = getInput(PICTASK_IN, current_pic_task);
+      getInput(POW_IN, current_power);
+
+      //The power consumed for said picture.
+      _power_consumed += current_power;
+
+      //Was an object detected in that picture?
+      std::string state_of_task;
+      getInput(TASK_STATE,state_of_task);
+
+      std::cout << "\n\n\n state of task" << state_of_task << "\n\n" << std::endl;
+      objs_detected.push(state_of_task);
+
+      std::cout << "obs taken pics of " << _obs_taken_pictures_of << std::endl;
 
 
-      if(tsk_res && pow_res)
+
+      if((_pictures_taken-1) % PIC_INCREMENT == 0 && _pictures_taken != 1) //Was that picture the nth picture?
       {
-        if(current_power > 65.0)
+        std::cout << "\n\n\n it was the nth picture \n\n\n" << std::endl;
+        //Whether or not to take another PIC_INCREMENT pics.
+        auto it = std::find(objs_detected.getContainer().begin(), objs_detected.getContainer().end(), detected);
+
+        int obs_num;
+        getInput(TOT_OBS, obs_num);
+        //If there was an object in any of the PIC_INCREMENT number of pictures taken
+        if (it != objs_detected.getContainer().end())
         {
-          return decrease_pic_rate();
+
+          std::cout << "\n\n An object was detected \n\n" << std::endl;
+
+          //Potentially take some more pictures.
+
+
+          //As long as it remains possible to take 6 more pictures of the remaining obstacles before exceeding the budget.
+
+
+          std::cout << " obs num " << obs_num << std::endl;
+          int obs_remaining = obs_num - _obs_taken_pictures_of;
+
+          double power_needed_after = (double)obs_remaining * (double)(2 * (PIC_INCREMENT+1)) * DETECTION_AVG_POW; //Power still necessary
+
+          double total_power_budget = (double)obs_num * (double)(2 * (PIC_INCREMENT+1)) * DETECTION_AVG_POW;
+
+          double power_needed_for_extra = PIC_INCREMENT * DETECTION_AVG_POW;
+
+          //Is there at least the power, 
+          double power_left = total_power_budget - _power_consumed;
+          //to take PIC_INCREMENT extra pictures while also taking PIC_INCREMENT + 1 pics of the rest?
+
+          std::cout << "\n\n  pow left " << power_left << " power_needed_after " << power_needed_after <<  " power_needed for extra " << power_needed_for_extra  << std::endl;
+
+          if(power_left >= (power_needed_after + power_needed_for_extra) && power_left > 0.0) 
+          {
+            std::cout << "increase pic rate" << std::endl;
+            increase_pic_rate();
+            return true;
+            //Its OK to take more pictures
+
+          }
+          else
+          {
+            std::cout << "no increase pic rate" << std::endl;
+
+            _pictures_taken = 0;
+            _obs_taken_pictures_of+=1;
+
+            if(_obs_taken_pictures_of == obs_num)
+            {
+              resetTracking();
+            }
+
+            return false;
+            //I'm done with this obstacle
+
+          }
+
+
         }
-        else if(current_pic_task < 0.4)
+        else
         {
-          return increase_pic_rate();
+
+          //No more pictures.
+          std::cout << "stop pic rate" << std::endl;
+
+
+          //This sets the rate back if it comes after an extended session.
+          set_pic_rate(_pictures_taken); //Till here and no further.
+
+          _pictures_taken = 0;
+          _obs_taken_pictures_of+=1;
+
+          if(_obs_taken_pictures_of == obs_num)
+          {
+            resetTracking();
+          }
+
+
+          return true;
         }
+            
       }
-      return false;    
+      else
+      {
+        // _obs_taken_pictures_of+=1;
+        return false;
+      }
+
+      return false;
     }
   private:
       static constexpr const char* POW_IN = "in_power";
       static constexpr const char* PICTASK_IN = "in_pictask";
-      const int PIC_INCREMENT = 2;
+      static constexpr const char* TASK_STATE = "in_pictask_state";
+      static constexpr const char* TOT_OBS = "obstacles_total";
+      static constexpr const char* OUT_PIC = "out_pic_rate";
+
+      std::string detected = std::string(OBJECT_DETECTED_STRING);
+
+      static constexpr int PIC_INCREMENT = 2;
       const int MIN_PIC_INCREMENT = 1;
       const int MAX_PIC_INCREMENT = 7;
       int _current_pic_rate = 5;
+
+      int _pictures_taken;
+      double _power_consumed;
+
+      int _obs_taken_pictures_of = 0;
+      FixedQueue<std::string, PIC_INCREMENT> objs_detected;
 
 
 
@@ -180,6 +334,7 @@ class AdaptChargeConditionOffline: public AdaptOnConditionOnStart<std::string>
 
       if(res)
       {
+        std::cout << "\n\n\n\n\n\n\n\n\n\n checking for charge " << sum_power_metric_observed << "\n\n\n\n\n\n\n\n\n\n checking for charge " << std::endl;
         sum_power_metric_observed+=1.0; //curr_power_metric; Just going to count a number of times for now. You can see how easily this could use a real power value.
         if(sum_power_metric_observed > CHARGE_THRESHOLD) //
         {
@@ -206,7 +361,7 @@ class AdaptChargeConditionOffline: public AdaptOnConditionOnStart<std::string>
   private:
     static constexpr const char* METRIC_TO_CHECK = "power_consumed";
     double sum_power_metric_observed;
-    const double CHARGE_THRESHOLD = 5.0;
+    const double CHARGE_THRESHOLD = 2.0;
 };
 
 
@@ -298,16 +453,23 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
 
     void speed_adaptation_msg(double max_speed_value)
     {
+      _current_max_speed = max_speed_value;
+
       std::vector<double> speed_vector = {max_speed_value,_default_y_velocity,_default_theta_velocity};
 
       std::string param_name;
+      std::string node_name;
+
 
       getInput(ADAP_SUB, param_name);
+      getInput(ADAP_LOC, node_name);
+
 
       rebet_msgs::msg::Adaptation adap;
       rclcpp::Parameter adap_param = rclcpp::Parameter(param_name,rclcpp::ParameterValue(speed_vector));
       adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::RosParameter);
       adap.parameter_adaptation = adap_param.to_parameter_msg();
+      adap.node_name = node_name;
 
       _offline_adaptations.push_back(adap);
 
@@ -321,6 +483,8 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
 
       if(new_max_speed < MIN_SPEED)
       {
+        std::cout << "no decrease speed possible " << std::endl;
+
         return false;
       }
 
@@ -352,22 +516,30 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
         double current_safety;
         double current_power;
         double current_move;
-        auto safe_res = getInput(POW_IN, current_safety);
-        auto pow_res = getInput(SAFE_IN, current_power);
+        auto safe_res = getInput(SAFE_IN, current_safety);
+        auto pow_res = getInput(POW_IN, current_power);
         auto move_res = getInput(MOVE_IN, current_move);
+
+
+
 
 
         std::cout << "I'm here in offline max spd! \n\n" << std::endl;
         if(safe_res && pow_res && move_res)
         {
-          std::cout << "now here " << current_safety << current_power << std::endl;
+          std::cout << "now here curr_safe " << current_safety << " curr_pow " << current_power << std::endl;
 
           if( (current_safety < 0.09) || (current_power > 5.0) )
           {
+            std::cout << "decrease speed here " << std::endl;
+            
+
             return decrease_speed();
           }
           if(current_power < 4.0 || current_safety > 0.15 || current_move < 0.40)
           {
+            std::cout << "increase speed here " << std::endl;
+
             return increase_speed();
           }
         }

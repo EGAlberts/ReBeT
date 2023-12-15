@@ -67,6 +67,8 @@ public:
     // geometry_msgs/PoseStamped pose
     // string behavior_tree
     std::stringstream ss;
+
+    ss << "setGoal in pose";
   
 
     goal.behavior_tree = "";
@@ -131,6 +133,8 @@ public:
   // The Cancel request will be send automatically to the server.
   NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback)
   {
+    // RCLCPP_INFO(node_->get_logger(), "Fdbk go to pose");
+
     // #feedback definition
     // geometry_msgs/PoseStamped current_pose
     // builtin_interfaces/Duration navigation_time

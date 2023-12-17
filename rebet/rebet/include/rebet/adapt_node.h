@@ -65,6 +65,10 @@ protected:
     rebet_msgs::srv::OfflineAdaptation::Response::SharedPtr offline_response_;
     rclcpp::Client<rebet_msgs::srv::OnlineAdaptation>::SharedPtr online_adapt_client_;
     rclcpp::Client<rebet_msgs::srv::OfflineAdaptation>::SharedPtr offline_adapt_client_;
+    std::vector<double> _current_utilities = {};
+    bool response_received_ = false;
+    std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(ADAP_SERVICE_TIMEOUT_MILLISECOND);
+    rclcpp::Time time_request_sent_;
 
 
 
@@ -75,7 +79,39 @@ protected:
     static constexpr const char* ADAP_SUB = "adaptation_subject";
     static constexpr const char* ADAP_LOC = "subject_location";
 
-    template <typename AdaptationService, typename AdaptationRequest, typename AdaptationResponse>
+    double evaluate_adaptation(rebet_msgs::msg::Adaptation given_adaptation)
+    {
+      switch(given_adaptation.adaptation_target)
+      {
+        case static_cast<int8_t>(AdaptationTarget::BlackboardEntry):
+          return utility_of_adaptation(given_adaptation.blackboard_adaptation);
+
+        case static_cast<int8_t>(AdaptationTarget::RosParameter):
+          return utility_of_adaptation(given_adaptation.parameter_adaptation);
+
+        case static_cast<int8_t>(AdaptationTarget::LifecycleTransition):
+          return utility_of_adaptation(given_adaptation.lifecycle_adaptation);
+        
+        default:
+          std::cout << "no case could satisfy" << std::endl; 
+      }
+
+      return -1.0;
+    }
+
+    virtual double utility_of_adaptation(rcl_interfaces::msg::Parameter ros_parameter)
+    {
+      //Meant for online adaptation.
+      return -1.0;
+    }
+
+    virtual double utility_of_adaptation(lifecycle_msgs::msg::Transition ros_lc_transition)
+    {
+      //Meant for online adaptation.
+      return -1.0;
+    }
+
+    template <typename AdaptationService, typename AdaptationRequest>
     void sendAdaptationRequest(const std::string& service_name,
     const std::string& strategy_name,
     typename rclcpp::Client<AdaptationService>::SharedPtr& client,
@@ -89,6 +125,7 @@ protected:
         request->adaptation_space = _var_params;
         request->task_identifier = registration_name;
         request->adaptation_strategy = strategy_name;
+        request->utility_previous = _current_utilities;
         online_future_response_ = client->async_send_request(request).share();
 
         
@@ -99,6 +136,75 @@ protected:
         std::cout << "offline adap sent type " << _offline_adaptations[0].parameter_adaptation.value.type << std::endl;
         offline_future_response_ = client->async_send_request(request).share();
       }
+    }
+
+    template <typename AdaptationService>
+    bool receiveAdaptationRequest(const rclcpp::FutureReturnCode& ret)
+    {
+
+        auto const timeout = rclcpp::Duration::from_seconds( double(service_timeout_.count()) / 1000);
+
+        if (ret != rclcpp::FutureReturnCode::SUCCESS)
+        {
+          if( (node_->now() - time_request_sent_) > timeout )
+          {
+            throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly? "); 
+          }
+          else{
+            return false;
+          }
+        }
+        else
+        {
+          response_received_ = true;
+
+          if constexpr (std::is_same_v<AdaptationService, rebet_msgs::srv::OnlineAdaptation>){
+            std::cout << "Response received!" << std::endl;
+
+            online_response_ = online_future_response_.get();
+            std::cout << "Got response from future!" << std::endl;
+
+            // future_response_ = {};
+
+            //You could check response success here
+
+            if(!online_response_->success)
+            {
+              std::cout << "Warning: Unsuccessful adaptation" << std::endl;
+            }
+            else
+            {
+              std:: cout << "filling utilities" << std::endl;
+              _current_utilities = {};
+              for (auto const & adaptation : online_response_->applied_adaptations){
+                _current_utilities.push_back(evaluate_adaptation(adaptation));
+              }
+
+            
+            }
+
+            if (!online_response_) {
+              throw std::runtime_error("Request was rejected by the service");
+            }
+          }
+          else if constexpr (std::is_same_v<AdaptationService, rebet_msgs::srv::OfflineAdaptation>){
+            std::cout << "Response received!" << std::endl;
+
+            offline_response_ = offline_future_response_.get();
+            std::cout << "Got response from future!" << std::endl;
+
+            // future_response_ = {};
+
+            //You could check response success here
+
+            if (!offline_response_) {
+              throw std::runtime_error("Request was rejected by the service");
+            }
+          }
+
+          return true;
+        }
+      
     }
 
   
@@ -142,6 +248,8 @@ private:
 
 
   protected:
+
+
 
     void registerAdaptations()
     {
@@ -254,13 +362,13 @@ class AdaptOnConditionOnStart : public AdaptOnCondition<ParamT>, public virtual 
 
         if(adaptation_type_ == AdaptationType::Online)
         {
-          sendAdaptationRequest<rebet_msgs::srv::OnlineAdaptation, rebet_msgs::srv::OnlineAdaptation::Request, rebet_msgs::srv::OnlineAdaptation::Response>(
+          sendAdaptationRequest<rebet_msgs::srv::OnlineAdaptation, rebet_msgs::srv::OnlineAdaptation::Request>(
             "/online_adaptation", strategy_name, online_adapt_client_, this->registrationName());
             
         }
         else if(adaptation_type_ == AdaptationType::Offline)
         {
-          sendAdaptationRequest<rebet_msgs::srv::OfflineAdaptation, rebet_msgs::srv::OfflineAdaptation::Request, rebet_msgs::srv::OfflineAdaptation::Response>(
+          sendAdaptationRequest<rebet_msgs::srv::OfflineAdaptation, rebet_msgs::srv::OfflineAdaptation::Request>(
             "/offline_adaptation", strategy_name, offline_adapt_client_, this->registrationName());
         }
         time_request_sent_ = node_->now();
@@ -281,61 +389,24 @@ class AdaptOnConditionOnStart : public AdaptOnCondition<ParamT>, public virtual 
         // std::cout << "no response received (yet)" << std::endl;
 
         auto const nodelay = std::chrono::milliseconds(0);
-        auto const timeout = rclcpp::Duration::from_seconds( double(service_timeout_.count()) / 1000);
-
+       
         rclcpp::FutureReturnCode ret;
 
+        bool received = false;
         if(adaptation_type_ == AdaptationType::Online){
           ret = callback_group_executor_.spin_until_future_complete(online_future_response_, nodelay);
+          received = receiveAdaptationRequest<rebet_msgs::srv::OnlineAdaptation>(ret);
         }
         else if(adaptation_type_ == AdaptationType::Offline){
           ret = callback_group_executor_.spin_until_future_complete(offline_future_response_, nodelay);
+          received = receiveAdaptationRequest<rebet_msgs::srv::OfflineAdaptation>(ret);
         }
 
-        if (ret != rclcpp::FutureReturnCode::SUCCESS)
-        {
-          if( (node_->now() - time_request_sent_) > timeout )
-          {
-            throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly? " + this->registrationName()); 
-          }
-          else{
-            return NodeStatus::RUNNING;
-          }
+        if(!received){
+          return NodeStatus::RUNNING;
         }
-        else
-        {
-          response_received_ = true;
+        
 
-          if(adaptation_type_ == AdaptationType::Online){
-            std::cout << "Response received!" << std::endl;
-
-            online_response_ = online_future_response_.get();
-            std::cout << "Got response from future!" << std::endl;
-
-            // future_response_ = {};
-
-            //You could check response success here
-
-            if (!online_response_) {
-              throw std::runtime_error("Request was rejected by the service");
-            }
-          }
-          else if(adaptation_type_ == AdaptationType::Offline){
-            std::cout << "Response received!" << std::endl;
-
-            offline_response_ = offline_future_response_.get();
-            std::cout << "Got response from future!" << std::endl;
-
-            // future_response_ = {};
-
-            //You could check response success here
-
-            if (!offline_response_) {
-              throw std::runtime_error("Request was rejected by the service");
-            }
-          }
-         
-        }
       }
 
     else
@@ -396,9 +467,8 @@ class AdaptOnConditionOnStart : public AdaptOnCondition<ParamT>, public virtual 
   protected:
     rclcpp::executors::SingleThreadedExecutor callback_group_executor_;
     bool _condition_was_true;
-    std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(ADAP_SERVICE_TIMEOUT_MILLISECOND);
-    bool response_received_ = false;
-    rclcpp::Time time_request_sent_;
+    
+    
 
   private:
 
@@ -490,13 +560,13 @@ class AdaptOnConditionOnRunning : public AdaptOnCondition<ParamT>, public virtua
 
         if(adaptation_type_ == AdaptationType::Online)
         {
-          sendAdaptationRequest<rebet_msgs::srv::OnlineAdaptation, rebet_msgs::srv::OnlineAdaptation::Request, rebet_msgs::srv::OnlineAdaptation::Response>(
+          sendAdaptationRequest<rebet_msgs::srv::OnlineAdaptation, rebet_msgs::srv::OnlineAdaptation::Request>(
             "/online_adaptation", strategy_name, online_adapt_client_, this->registrationName());
             
         }
         else if(adaptation_type_ == AdaptationType::Offline)
         {
-          sendAdaptationRequest<rebet_msgs::srv::OfflineAdaptation, rebet_msgs::srv::OfflineAdaptation::Request, rebet_msgs::srv::OfflineAdaptation::Response>(
+          sendAdaptationRequest<rebet_msgs::srv::OfflineAdaptation, rebet_msgs::srv::OfflineAdaptation::Request>(
             "/offline_adaptation", strategy_name, offline_adapt_client_, this->registrationName());
         }
       time_request_sent_ = node_->now();
@@ -506,7 +576,6 @@ class AdaptOnConditionOnRunning : public AdaptOnCondition<ParamT>, public virtua
     } 
     else if(_to_adapt && request_sent_){
       
-
       // FIRST case: check if the goal request has a timeout
       if(!response_received_ )
       {
@@ -515,68 +584,30 @@ class AdaptOnConditionOnRunning : public AdaptOnCondition<ParamT>, public virtua
 
 
         auto const nodelay = std::chrono::milliseconds(0);
-        auto const timeout = rclcpp::Duration::from_seconds( double(service_timeout_.count()) / 1000);
 
         rclcpp::FutureReturnCode ret;
 
+        bool received = false;
         if(adaptation_type_ == AdaptationType::Online){
           ret = callback_group_executor_.spin_until_future_complete(online_future_response_, nodelay);
+          received = receiveAdaptationRequest<rebet_msgs::srv::OnlineAdaptation>(ret);
         }
         else if(adaptation_type_ == AdaptationType::Offline){
           ret = callback_group_executor_.spin_until_future_complete(offline_future_response_, nodelay);
+          received = receiveAdaptationRequest<rebet_msgs::srv::OfflineAdaptation>(ret);
         }
 
-        if (ret != rclcpp::FutureReturnCode::SUCCESS)
-        {
-          if( (node_->now() - time_request_sent_) > timeout )
-          {
-            throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly? " + this->registrationName()); 
-          }
-          else{
-            return NodeStatus::RUNNING;
-          }
+        if(!received){
+          return NodeStatus::RUNNING;
         }
         else
         {
-          std::cout << "Response received!" << std::endl;
-
-          response_received_ = true;
-          if(adaptation_type_ == AdaptationType::Online){
-            std::cout << "Response received!" << std::endl;
-
-            online_response_ = online_future_response_.get();
-            std::cout << "Got response from future!" << std::endl;
-
-            // future_response_ = {};
-
-            //You could check response success here
-
-            if (!online_response_) {
-              throw std::runtime_error("Request was rejected by the service");
-            }
-          }
-          else if(adaptation_type_ == AdaptationType::Offline){
-            std::cout << "Response received!" << std::endl;
-
-            offline_response_ = offline_future_response_.get();
-            std::cout << "Got response from future!" << std::endl;
-
-            // future_response_ = {};
-
-            //You could check response success here
-
-            if (!offline_response_) {
-              throw std::runtime_error("Request was rejected by the service");
-            }
-
-          }
-
           _to_adapt = false; //Reset condition.
-
           offline_response_ = {};
           online_response_ = {};
           request_sent_ = false;
         }
+        
       }
 
     }
@@ -623,9 +654,8 @@ class AdaptOnConditionOnRunning : public AdaptOnCondition<ParamT>, public virtua
   }
 
     private:
-      std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(ADAP_SERVICE_TIMEOUT_MILLISECOND);
-      bool response_received_ = false;
-      rclcpp::Time time_request_sent_;
+      
+
       bool request_sent_ = false;
       rclcpp::executors::SingleThreadedExecutor callback_group_executor_;
       bool adapted_yet = false;
@@ -705,13 +735,13 @@ class AdaptOnConditionOnSuccess : public AdaptOnCondition<ParamT>, public virtua
 
         if(adaptation_type_ == AdaptationType::Online)
         {
-          sendAdaptationRequest<rebet_msgs::srv::OnlineAdaptation, rebet_msgs::srv::OnlineAdaptation::Request, rebet_msgs::srv::OnlineAdaptation::Response>(
+          sendAdaptationRequest<rebet_msgs::srv::OnlineAdaptation, rebet_msgs::srv::OnlineAdaptation::Request>(
             "/online_adaptation", strategy_name, online_adapt_client_, this->registrationName());
             
         }
         else if(adaptation_type_ == AdaptationType::Offline)
         {
-          sendAdaptationRequest<rebet_msgs::srv::OfflineAdaptation, rebet_msgs::srv::OfflineAdaptation::Request, rebet_msgs::srv::OfflineAdaptation::Response>(
+          sendAdaptationRequest<rebet_msgs::srv::OfflineAdaptation, rebet_msgs::srv::OfflineAdaptation::Request>(
             "/offline_adaptation", strategy_name, offline_adapt_client_, this->registrationName());
         }
           time_request_sent_ = node_->now();
@@ -727,62 +757,24 @@ class AdaptOnConditionOnSuccess : public AdaptOnCondition<ParamT>, public virtua
 
 
             auto const nodelay = std::chrono::milliseconds(0);
-            auto const timeout = rclcpp::Duration::from_seconds( double(service_timeout_.count()) / 1000);
-
+           
             rclcpp::FutureReturnCode ret;
 
+            bool received = false;
             if(adaptation_type_ == AdaptationType::Online){
               ret = callback_group_executor_.spin_until_future_complete(online_future_response_, nodelay);
+              received = receiveAdaptationRequest<rebet_msgs::srv::OnlineAdaptation>(ret);
             }
             else if(adaptation_type_ == AdaptationType::Offline){
               ret = callback_group_executor_.spin_until_future_complete(offline_future_response_, nodelay);
+              received = receiveAdaptationRequest<rebet_msgs::srv::OfflineAdaptation>(ret);
             }
 
-            if (ret != rclcpp::FutureReturnCode::SUCCESS)
-            {
-              if( (node_->now() - time_request_sent_) > timeout )
-              {
-                throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly? " + this->registrationName()); 
-              }
-              else{
-                return NodeStatus::RUNNING;
-              }
+            if(!received){
+              return NodeStatus::RUNNING;
             }
             else
             {
-              std::cout << "Response received!" << std::endl;
-
-              response_received_ = true;
-              if(adaptation_type_ == AdaptationType::Online){
-                std::cout << "Response received!" << std::endl;
-
-                online_response_ = online_future_response_.get();
-                std::cout << "Got response from future!" << std::endl;
-
-                // future_response_ = {};
-
-                //You could check response success here
-
-                if (!online_response_) {
-                  throw std::runtime_error("Request was rejected by the service");
-                }
-              }
-              else if(adaptation_type_ == AdaptationType::Offline){
-                std::cout << "Response received!" << std::endl;
-
-                offline_response_ = offline_future_response_.get();
-                std::cout << "Got response from future!" << std::endl;
-
-                // future_response_ = {};
-
-                //You could check response success here
-
-                if (!offline_response_) {
-                  throw std::runtime_error("Request was rejected by the service");
-                }
-
-              }
-
               _to_adapt = false; //Reset condition.
 
               offline_response_ = {};
@@ -833,9 +825,7 @@ class AdaptOnConditionOnSuccess : public AdaptOnCondition<ParamT>, public virtua
   }
 
     private:
-      std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(ADAP_SERVICE_TIMEOUT_MILLISECOND);
-      bool response_received_ = false;
-      rclcpp::Time time_request_sent_;
+
       bool request_sent_ = false;
       bool _condition_was_true = false;
       rclcpp::executors::SingleThreadedExecutor callback_group_executor_;
@@ -923,13 +913,13 @@ class AdaptOnConditionOnFailure : public AdaptOnCondition<ParamT>, public virtua
 
           if(adaptation_type_ == AdaptationType::Online)
           {
-            sendAdaptationRequest<rebet_msgs::srv::OnlineAdaptation, rebet_msgs::srv::OnlineAdaptation::Request, rebet_msgs::srv::OnlineAdaptation::Response>(
+            sendAdaptationRequest<rebet_msgs::srv::OnlineAdaptation, rebet_msgs::srv::OnlineAdaptation::Request>(
               "/online_adaptation", strategy_name, online_adapt_client_, this->registrationName());
               
           }
           else if(adaptation_type_ == AdaptationType::Offline)
           {
-            sendAdaptationRequest<rebet_msgs::srv::OfflineAdaptation, rebet_msgs::srv::OfflineAdaptation::Request, rebet_msgs::srv::OfflineAdaptation::Response>(
+            sendAdaptationRequest<rebet_msgs::srv::OfflineAdaptation, rebet_msgs::srv::OfflineAdaptation::Request>(
               "/offline_adaptation", strategy_name, offline_adapt_client_, this->registrationName());
           }
           time_request_sent_ = node_->now();
@@ -949,57 +939,18 @@ class AdaptOnConditionOnFailure : public AdaptOnCondition<ParamT>, public virtua
 
             rclcpp::FutureReturnCode ret;
 
+            bool received = false;
             if(adaptation_type_ == AdaptationType::Online){
               ret = callback_group_executor_.spin_until_future_complete(online_future_response_, nodelay);
+              received = receiveAdaptationRequest<rebet_msgs::srv::OnlineAdaptation>(ret);
             }
             else if(adaptation_type_ == AdaptationType::Offline){
               ret = callback_group_executor_.spin_until_future_complete(offline_future_response_, nodelay);
+              received = receiveAdaptationRequest<rebet_msgs::srv::OfflineAdaptation>(ret);
             }
 
-
-            if (ret != rclcpp::FutureReturnCode::SUCCESS)
-            {
-              // std::cout << "Not a success response (yet)" << std::endl;
-
-              if( (node_->now() - time_request_sent_) > timeout )
-              {
-                throw std::runtime_error("ran out of time trying to request adaptation, is your adaptation logic working properly?" + this->registrationName()); 
-              }
-            }
-            else
-            {
+            if(received){
               std::cout << "Response received!" << std::endl;
-
-              response_received_ = true;
-              if(adaptation_type_ == AdaptationType::Online){
-                std::cout << "Response received!" << std::endl;
-
-                online_response_ = online_future_response_.get();
-                std::cout << "Got response from future!" << std::endl;
-
-                // future_response_ = {};
-
-                //You could check response success here
-
-                if (!online_response_) {
-                  throw std::runtime_error("Request was rejected by the service");
-                }
-              }
-              else if(adaptation_type_ == AdaptationType::Offline){
-                std::cout << "Response received!" << std::endl;
-
-                offline_response_ = offline_future_response_.get();
-                std::cout << "Got response from future!" << std::endl;
-
-                // future_response_ = {};
-
-                //You could check response success here
-
-                if (!offline_response_) {
-                  throw std::runtime_error("Request was rejected by the service");
-                }
-
-              }
 
               _to_adapt = false; //Reset condition.
 
@@ -1043,9 +994,7 @@ class AdaptOnConditionOnFailure : public AdaptOnCondition<ParamT>, public virtua
   }
 
     private:
-      std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(ADAP_SERVICE_TIMEOUT_MILLISECOND);
-      bool response_received_ = false;
-      rclcpp::Time time_request_sent_;
+
       bool request_sent_ = false;
       bool _condition_was_true = false;
       rclcpp::executors::SingleThreadedExecutor callback_group_executor_;
@@ -1106,107 +1055,6 @@ class AdaptPeriodicallyOnRunning : public AdaptOnConditionOnRunning<ParamT>, pub
     private:
       int _window_length;
       int _window_start;
-};
-
-
-
-
-
-
-class AdaptSpiralAltitudeOnline : public AdaptPeriodicallyOnRunning<double>
-{
-  public:
-
-    AdaptSpiralAltitudeOnline(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::Online)
-    {
-      registerAdaptations();
-
-      //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.
-  
-    }
-
-    static PortsList providedPorts()
-    {
-      PortsList base_ports = AdaptPeriodicallyOnRunning::providedPorts();
-
-      PortsList child_ports =  {
-              };
-      child_ports.merge(base_ports);
-
-      return child_ports;
-    }
-
-};
-
-class AdaptThrusterOffline : public AdaptOnConditionOnRunning<double>
-{
-
-  public:
-    AdaptThrusterOffline(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnRunning<double>(name, config, AdaptationTarget::LifecycleTransition, AdaptationType::Offline)
-    {
-    }
-
-    static PortsList providedPorts()
-    {
-      PortsList base_ports = AdaptOnConditionOnRunning::providedPorts();
-
-      PortsList child_ports =  {
-        InputPort<std::string>(METRIC_TO_CHECK, "status of thruster"),
-              };
-      child_ports.merge(base_ports);
-
-      return child_ports;
-    }
-
-    virtual bool evaluate_condition() override
-    {
-      _offline_adaptations = {};
-      //We assume, that since the QR from which this node receives Input should always output to its port prior to this being ticked, that the state is up to date.
-      std::string thruster_eval;
-      auto res = getInput<std::string>(METRIC_TO_CHECK, thruster_eval);
-
-      std::string node_name;
-      getInput(ADAP_LOC, node_name);
-
-      if(res)
-      {
-        if(thruster_eval == "Thruster Failure") //It may mean that we should try to recover the thrusters
-        {
-          lifecycle_msgs::msg::Transition transition;
-          transition.id = 3; //Activate transition
-
-          rebet_msgs::msg::Adaptation adap;
-
-          adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::LifecycleTransition);
-          adap.lifecycle_adaptation = transition;
-          adap.node_name = node_name;
-
-          _offline_adaptations.push_back(adap);
-
-    
-          return true;
-        }
-        if(thruster_eval == "Thrusters Recovered")
-        {
-          lifecycle_msgs::msg::Transition transition;
-          transition.id = 4; //Deactivate transition
-
-          rebet_msgs::msg::Adaptation adap;
-
-          adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::LifecycleTransition);
-          adap.lifecycle_adaptation = transition;
-          adap.node_name = node_name;
-
-          _offline_adaptations.push_back(adap);
-
-          return true;
-        }
-      }
-
-      return false;
-    }
-  private:
-      static constexpr const char* METRIC_TO_CHECK = "thruster_condition";
 };
 
 }   // namespace BT

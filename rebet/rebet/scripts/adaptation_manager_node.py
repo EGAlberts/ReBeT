@@ -385,21 +385,28 @@ class AdaptationManager(Node):
 
         task_identifier = str(request.task_identifier)
         adaptation_strategy = str(request.adaptation_strategy)
-
+        utilities = request.utility_previous
         response.success = False
         adapt_state = AdaptationState()
-        
+        self.get_logger().info(str(request))
         adaptation_at_system_level = "system" in task_identifier #TODO: make this more robust.
             
+        if(list(utilities) == []):
+            self.get_logger().info("assuming  this is the first time, filling utility with dummy value")
+            utilities = [0.5]
 
-        adapt_state.qr_values = self.get_system_utility(adaptation_at_system_level)
 
-        self.report_on_system(adapt_state.qr_values)
-        self.get_logger().info('\n\n sys util \n\n')
+        adapt_state.current_utility = utilities
 
-        adapt_state.system_possible_configurations = self.make_configurations(request.adaptation_space)
+        
+        # adapt_state.qr_values = self.get_system_utility(adaptation_at_system_level)
 
-        self.get_logger().info(str(adapt_state.system_possible_configurations))
+        self.report_on_system([])
+        self.get_logger().info('\n\n sys util \n\n' + str(utilities))
+
+        adapt_state.possible_configurations = self.make_configurations(request.adaptation_space)
+
+        #self.get_logger().info(str(adapt_state.possible_configurations))
         
 
 
@@ -427,35 +434,49 @@ class AdaptationManager(Node):
             self.get_logger().info('\n\n REUSE OF STRATEGY FOR TASK:' + task_identifier+'\n\n')
 
 
-
+        self.get_logger().info('\n\n REUSE OF STRATEGY FOR TASK:' + str(adapt_state)+'\n\n')
         
         suggested_configuration = self.task_to_strategy_map[task_identifier].suggest_adaptation(adapt_state)
         #Configuration.msg
         #string[] node_names
         #int8[] adaptation_target_types
         #rcl_interfaces/Parameter[] configuration_parameters
-        
+        response.applied_adaptations = []
+
         for i in range(len(suggested_configuration.node_names)):
             node_name = suggested_configuration.node_names[i]
             type_of_adaptation = suggested_configuration.adaptation_target_types[i]
             adaption_param = suggested_configuration.configuration_parameters[i]
+
+            adap = Adaptation()
+            adap.adaptation_target = type_of_adaptation
+            adap.node_name = node_name
 
             adaptation_responses = []
              
             if(type_of_adaptation == Adaptation.ROSPARAMETER):
                 self.get_logger().info('\n\n ros_param adaptation \n\n')
                 is_exec_success = self.execute_rp_adaptation(adaption_param,node_name)
+                adap.parameter_adaptation = adaption_param
             elif(type_of_adaptation == Adaptation.BLACKBOARDENTRY):
                 self.get_logger().info('\n\n blackboard adaptation \n\n')
                 is_exec_success = self.execute_bb_adaptation(adaption_param)
+                adap.blackboard_adaptation = adaption_param
+            elif(type_of_adaptation == Adaptation.STATETRANSITION):
+                self.get_logger().info('\n\n lifecycle adaptation \n\n')
+                is_exec_success = self.execute_lc_adaptation(suggested_configuration.configuration_transitions[i], node_name)
+                adap.lifecycle_adaptation = suggested_configuration.configuration_transitions[i]
             else:
                 self.get_logger().error("Unknown or unspecified adaptation_target")
                 response.success = False
                 return response
             adaptation_responses.append(is_exec_success)
+            if(is_exec_success):
+                response.applied_adaptations.append(adap)
 
         response.success = all(adaptation_responses)
-        
+
+
         return response
 
 

@@ -18,6 +18,8 @@ rebet::to_string(const SystemAttributeType type)
       return "diagnostic keyvalue msg";
     case SystemAttributeType::ATTRIBUTE_LASER:
       return "laserscan attribute msg";
+    case SystemAttributeType::ATTRIBUTE_FLOAT:
+      return "float attribute msg";
     default:
       return "unknown type";
   }
@@ -63,8 +65,10 @@ rebet::to_string(const SystemAttributeValue & value)
         return "odom message inside :) ";
     case SystemAttributeType::ATTRIBUTE_DIAG:
         return "diagnostic keyvalue message inside :) ";
-      case SystemAttributeType::ATTRIBUTE_LASER:
+    case SystemAttributeType::ATTRIBUTE_LASER:
         return "laserscan message inside :) ";
+    case SystemAttributeType::ATTRIBUTE_FLOAT:
+        return "float message inside :) ";
     default:
       return "unknown type";
   }
@@ -82,6 +86,7 @@ SystemAttributeValue::SystemAttributeValue(const rebet_msgs::msg::SystemAttribut
     case ATTRIBUTE_ODOM:
     case ATTRIBUTE_DIAG:
     case ATTRIBUTE_LASER:
+    case ATTRIBUTE_FLOAT:
     case ATTRIBUTE_NOT_SET:
       break;
     default:
@@ -105,6 +110,12 @@ SystemAttributeValue::SystemAttributeValue(const sensor_msgs::msg::LaserScan las
 {
   value_.laser_value = laser_value;
   value_.type = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_LASER;
+}
+
+SystemAttributeValue::SystemAttributeValue(const std_msgs::msg::Float32 float_value)
+{
+  value_.float_value = float_value;
+  value_.type = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_FLOAT;
 }
 
 SystemAttributeType

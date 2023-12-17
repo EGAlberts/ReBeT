@@ -1,0 +1,29 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="Untitled">
+	<Sequence>
+		<Script code="armed_choice:=true; mavros_mode:='GUIDED'; se_weight:=1.0"/>
+		<MoveRobustly>
+			<AdaptThrusterRecovery thruster_condition="{se_state}" subject_location="f_maintain_motion_node">
+				<Sequence>
+					
+					<ArmMotors armed_or_not="{armed_choice}" service_name="/mavros/cmd/arming"/>
+					<SetMavrosMode desired_mode="{mavros_mode}" service_name="/mavros/set_mode"/>
+					<RetryUntilSuccessful num_attempts="-1">
+						<ConfirmMavrosState mode_to_confirm="{mavros_mode}" armed_to_confirm="{armed_choice}" topic_name="/mavros/state"/>
+					</RetryUntilSuccessful>
+						<SearchEfficiently in_water_visibility="{water_visibility}" weight="{se_weight}" metric="{se_metric}" out_state="{se_state}" thruster_status_one="{c_thruster_1}" thruster_status_two="{c_thruster_2}" thruster_status_three="{c_thruster_3}" thruster_status_four="{c_thruster_4}" thruster_status_five="{c_thruster_5}" thruster_status_six="{c_thruster_6}">
+							<AdaptSpiralAltitude adaptation_options="1.0;2.0;3.0" adaptation_strategy="ucb_strategy" adaptation_subject="spiral_altitude" subject_location="f_generate_search_path_node" adaptation_period="10">
+								<SpiralSearch/>
+							</AdaptSpiralAltitude>
+						</SearchEfficiently>
+
+					<FollowPipeline/>
+				</Sequence>
+			</AdaptThrusterRecovery>
+		</MoveRobustly>
+
+	</Sequence>
+  </BehaviorTree>
+</root>
+
+

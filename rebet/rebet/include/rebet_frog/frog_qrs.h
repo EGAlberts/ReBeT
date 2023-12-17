@@ -307,7 +307,7 @@ class MovementPowerQR : public TaskLevelQR
    
       int _odom_last_timestamp_sec;
 
-      const float WAFFLE_MAX_LIN_VEL = 0.26;
+      
 
       static constexpr const char* IN_ODOM = "in_odom";
 

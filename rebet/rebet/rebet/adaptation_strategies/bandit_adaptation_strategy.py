@@ -81,7 +81,7 @@ class BanditStrategy(AdaptationStrategy):
 
     def __init__(self, bandit_name):
         super().__init__(bandit_name.lower())
-        
+        print("\n\nbandit created!\n\n")
         self.round_num = 0
         self.bandit_name = bandit_name
         # self.declare_parameter(HYPERPARAM_PARAM,[""])
@@ -110,7 +110,7 @@ class BanditStrategy(AdaptationStrategy):
         self.configuration_dict = {}
         self.prev_configurations_msg = None
  
-        self.qr_values = []
+        self.utilities = []
 
         self.bandit_not_initialized = True
 
@@ -138,7 +138,7 @@ class BanditStrategy(AdaptationStrategy):
         
 
     def suggest_adaptation(self, adaptation_state):
-        self.possible_configs = adaptation_state.system_possible_configurations
+        self.possible_configs = adaptation_state.possible_configurations
 
         if(self.bandit_not_initialized):
             self.initialize_bandit()
@@ -149,7 +149,7 @@ class BanditStrategy(AdaptationStrategy):
             #New configurations have been added 
             self.make_hashable()
 
-            self.prev_configurations_msg = adaptation_state.system_possible_configurations
+            self.prev_configurations_msg = adaptation_state.possible_configurations
             
             self.bandit_instance.arms = list(self.configuration_dict.keys()) #The chosen bandit might not properly support the change in arms.
             
@@ -160,20 +160,16 @@ class BanditStrategy(AdaptationStrategy):
 
         reward = 0 
         #for qr in msg.qr_values: self.reward+=qr.qr_fulfilment 
-        self.qr_values = [qr.qr_fulfilment for qr in adaptation_state.qr_values ]
-        qr_mean = np.mean(self.qr_values)
-        qr_product =  np.prod(self.qr_values)
-        amplifier = 1
-        qr_product = qr_product # + ((np.sqrt(1-qr_product) - (1 -  qr_product)) * amplifier)
-
-        reward = qr_mean + qr_product
-
-        reward, _, _ = truncate(reward)
+        self.utilities = [adap_utility for adap_utility in adaptation_state.current_utility ]
+       
+        reward = np.mean(self.utilities) #should be made more nuanced
+        print("\n\n\n REWARD RECEIVED   \n\n\n" + str(reward))
+        # reward, _, _ = truncate(reward)
         next_arm = self.bandit_instance.get_next_arm(reward)
         self.round_num+=1
         file = open('bandit_report.csv', mode='a', newline='')
         writer = csv.writer(file)
-        row = [self.session_name, str(time.time()), str(next_arm), str(reward), str(bandit_args["bounds"]), str(self.qr_values), str(self.bandit_name), str(self.hyper_param_kwargs), str(self.round_num)]
+        row = [self.session_name, str(time.time()), str(next_arm), str(reward), str(bandit_args["bounds"]), str(self.utilities), str(self.bandit_name), str(self.hyper_param_kwargs), str(self.round_num)]
         writer.writerow(row)
         file.close()
         

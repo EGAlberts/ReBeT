@@ -20,6 +20,8 @@ from nav_msgs.msg import Odometry
 from diagnostic_msgs.msg import DiagnosticArray
 from sensor_msgs.msg import LaserScan
 from diagnostic_msgs.msg import KeyValue
+from std_msgs.msg import Float32
+
 import numpy as np
 
 class SystemReflection(Node):
@@ -42,6 +44,9 @@ class SystemReflection(Node):
         self.laserscan_subscription = self.create_subscription(LaserScan,'/scan',self.ls_scan_cb,1,callback_group=MutuallyExclusiveCallbackGroup())
         self.odometry_subscription = self.create_subscription(Odometry,'/odom',self.tb_odom_cb,10, callback_group = MutuallyExclusiveCallbackGroup())
         
+        self.pipeline_distance_inspected_sub = self.create_subscription(Float32,'pipeline/distance_inspected',self.distance_inspected_cb,1,callback_group=MutuallyExclusiveCallbackGroup())
+
+        self.distance_inspected_msg = None
         self.req = SetAttributesInBlackboard.Request()
         self.odom_msg = None
         self.laser_msg = None
@@ -50,6 +55,8 @@ class SystemReflection(Node):
         self.battery_state = None
         self.state_queue = deque(maxlen=20) #just picked a random length, can be adjusted..
         self.diag_queue_lock = threading.Lock()
+
+        
 
     def send_request(self, script):
         print("sending req")
@@ -67,6 +74,9 @@ class SystemReflection(Node):
         self.counter+=1
         if(self.counter % 1000 == 0): self.get_logger().info('1000th Laser Msg Received!!')
         if self.counter > 200000: self.counter = 0
+
+    def distance_inspected_cb(self, msg):
+        self.distance_inspected_msg = msg
 
     def tb_odom_cb(self,msg):
         self.odom_msg = msg
@@ -120,6 +130,9 @@ class SystemReflection(Node):
             new_sys_att.value = att_value 
             self.req.sys_attributes.append(new_sys_att)
 
+            self.odom_msg = None
+
+
 
         if(self.laser_msg is not None):
             new_sys_att = SystemAttribute()
@@ -132,12 +145,24 @@ class SystemReflection(Node):
             new_sys_att.value = att_value 
             self.req.sys_attributes.append(new_sys_att)
 
+            self.laser_msg = None
+
+        if(self.distance_inspected_msg is not None):
+            new_sys_att = SystemAttribute()
+            new_sys_att.name = 'distance_inspected'
+
+            att_value = SystemAttributeValue()
+            att_value.header.stamp = self.get_clock().now().to_msg()
+            att_value.type = 4 #float type
+            att_value.float_value = self.distance_inspected_msg
+            new_sys_att.value = att_value 
+            self.req.sys_attributes.append(new_sys_att)
+
+            self.distance_inspected_msg = None
+
 
             # response = self.cli.call(self.req)
 
-
-
-            self.odom_msg = None
         
         with self.diag_queue_lock:
             while not self.diagnostic_values.empty():

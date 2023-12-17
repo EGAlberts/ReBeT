@@ -21,6 +21,7 @@
   <depend>lifecycle_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>slam_toolbox</depend>
+  <depend>ultralytics</depend>
   <depend>wavefront_frontier_msgs</depend>
 
  

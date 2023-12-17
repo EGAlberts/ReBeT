@@ -44,6 +44,9 @@ class AdaptPictureRateOnline: public AdaptOnConditionOnStart<int>
     }
 
 
+
+
+
 };
 
 class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
@@ -78,6 +81,9 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
 
     void resetTracking()
     {
+      rotations_done+=1;
+
+      setOutput(ROT, rotations_done);
         std::cout << "\n\n\n RRESET TRACKING \n\n\n" << std::endl;
       _pictures_taken = 0;
       _power_consumed = 0.0;
@@ -93,7 +99,9 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
         InputPort<double>(PICTASK_IN,"the det obj task metric"),
         InputPort<std::string>(TASK_STATE,"state of the det obj task metric"),
         InputPort<int>(TOT_OBS, "how many obstacles there are"),
-        OutputPort<int>(OUT_PIC, "elastic picture rate")
+        OutputPort<int>(OUT_PIC, "elastic picture rate"),
+        OutputPort<int>(ROT, "cycles of visiting obstacles"),
+
               };
       child_ports.merge(base_ports);
 
@@ -281,6 +289,8 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
       static constexpr const char* TASK_STATE = "in_pictask_state";
       static constexpr const char* TOT_OBS = "obstacles_total";
       static constexpr const char* OUT_PIC = "out_pic_rate";
+      static constexpr const char* ROT = "rotations_done";
+
 
       std::string detected = std::string(OBJECT_DETECTED_STRING);
 
@@ -288,7 +298,7 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
       const int MIN_PIC_INCREMENT = 1;
       const int MAX_PIC_INCREMENT = 7;
       int _current_pic_rate = 5;
-
+      int rotations_done = 0;
       int _pictures_taken;
       double _power_consumed;
 
@@ -361,7 +371,7 @@ class AdaptChargeConditionOffline: public AdaptOnConditionOnStart<std::string>
   private:
     static constexpr const char* METRIC_TO_CHECK = "power_consumed";
     double sum_power_metric_observed;
-    const double CHARGE_THRESHOLD = 2.0;
+    const double CHARGE_THRESHOLD = 10.0;
 };
 
 
@@ -398,11 +408,17 @@ class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
       //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.  
     }
 
+    
+
     static PortsList providedPorts()
     {
       PortsList base_ports = AdaptPeriodicallyOnRunning::providedPorts();
 
       PortsList child_ports =  {
+        InputPort<double>(POW_IN,"the power metric"),
+        InputPort<double>(SAFE_IN,"the safety metric"),
+        InputPort<double>(MOVE_IN,"the movement efficiency"),
+
               };
       child_ports.merge(base_ports);
 
@@ -410,10 +426,135 @@ class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
     }
 
 
+    bool unsafe_power_hungry(double current_safety, double current_power)
+    {
+      return ((current_safety < 0.09) || (current_power > 5.0));
+    }
+
+    bool safe_lowpower_slow(double current_safety, double current_power, double current_move_eff)
+    {
+      return (current_safety > 0.15 || current_power < 4.0 || current_move_eff < 0.40);
+    }
+
+
+
+
+    virtual double utility_of_adaptation(rcl_interfaces::msg::Parameter ros_parameter) override
+    {
+      auto parameter_object = rclcpp::ParameterValue(ros_parameter.value);
+
+      std::vector<double> chosen_speeds = parameter_object.get<std::vector<double>>();
+
+      double chosen_max_speed = chosen_speeds[0]
+    
+      double current_safety;
+      double current_power;
+      double current_move;
+      auto safe_res = getInput(SAFE_IN, current_safety);
+      auto pow_res = getInput(POW_IN, current_power);
+      auto move_res = getInput(MOVE_IN, current_move);
+
+ //if(current_power < 4.0 || current_safety > 0.15 || current_move < 0.40)
+
+      if(safe_res && pow_res && move_res)
+      {
+        if(chosen_max_speed == 0.10)
+        {
+
+          if(unsafe_power_hungry(current_safety,current_power))
+          {
+            //GOOD
+            return 1.0;
+          }
+          else if(safe_lowpower_slow(current_safety,current_power, current_move))
+          {
+            //BAD
+            return 0.1;
+          }
+          else
+          {
+            //Average Safety, Average power, not slow.
+            return 0.25;
+          }
+        }
+        else if(chosen_max_speed == 0.18)
+        {
+          if(unsafe_power_hungry(current_safety,current_power))
+          {
+            //OK
+            return 0.4;
+          }
+          else if(safe_lowpower_slow(current_safety,current_power, current_move))
+          {
+            //OK
+            return 0.6;
+          }
+          else
+          {
+            //Average Safety, Average power, not slow.
+            return 0.5;
+          }
+        }
+        else if(chosen_max_speed == 0.26)
+        {
+    
+          if(unsafe_power_hungry(current_safety,current_power))
+          {
+            //BAD
+            return 0.0;
+          }
+          else if(safe_lowpower_slow(current_safety,current_power, current_move))
+          {
+            //GOOD
+            return 0.9;
+          }
+          else
+          {
+            //Average Safety, Average power, not slow.
+            return 0.75;
+          }
+
+          
+        }
+        else
+        {
+          std::cout << "chosen: " << chosen_max_speed << std::endl;
+          throw std::runtime_error("Chosen adaptations did not comply with max speed options ");
+        }
+
+      }
+      else
+      {
+        std::cout << "For some reason a value was not found in the blackboard" << std::endl;  
+        return 0.5;
+      }
+
+    }
+        // std::cout << "I'm here in offline max spd! \n\n" << std::endl;
+        // if(safe_res && pow_res && move_res)
+        // {
+        //   std::cout << "now here curr_safe " << current_safety << " curr_pow " << current_power << std::endl;
+
+        //   if( (current_safety < 0.09) || (current_power > 5.0) )
+        //   {
+        //     std::cout << "decrease speed here " << std::endl;
+            
+        //     return decrease_speed();
+        //   }
+        //   if(current_power < 4.0 || current_safety > 0.15 || current_move < 0.40)
+        //   {
+        //     std::cout << "increase speed here " << std::endl;
+
+        //     return increase_speed();
+        //   }
+
+
   private:
     double _default_y_velocity = 0.0; //The robot in question can not move along its y axis independently.
     double _default_theta_velocity = 2.5; //We are not interested in modifying the rotation speed here, but could be extended to do so.
-
+    static constexpr const char* POW_IN = "in_power";
+    static constexpr const char* SAFE_IN = "in_safety";
+    static constexpr const char* MOVE_IN = "in_movement";
 
 };
 
@@ -533,7 +674,6 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
           {
             std::cout << "decrease speed here " << std::endl;
             
-
             return decrease_speed();
           }
           if(current_power < 4.0 || current_safety > 0.15 || current_move < 0.40)
@@ -568,7 +708,7 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
     static constexpr const char* SAFE_IN = "in_safety";
     static constexpr const char* MOVE_IN = "in_movement";
     const double SPEED_INCREMENT = 0.08;
-    const double MIN_SPEED = 0.08;
+    const double MIN_SPEED = 0.10;
     const double MAX_MAX_SPEED = 0.26;
     double _current_max_speed = MAX_MAX_SPEED;
 };

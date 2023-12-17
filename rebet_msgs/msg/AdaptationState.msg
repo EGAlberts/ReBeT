@@ -1,2 +1,2 @@
-QRValue[] qr_values
-Configuration[] system_possible_configurations
+float64[] current_utility
+rebet_msgs/Configuration[] possible_configurations

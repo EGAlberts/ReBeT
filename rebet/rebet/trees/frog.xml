@@ -5,7 +5,7 @@
 
 
 	<Sequence>
-		<Script code="charge_or_not='no_charge'; pic_rate:=3; task_weight:=1.0; task_metric:=1.0; obj_power_weight:=1.0; obj_power_metric:=1.0; sys_power_weight:=1.0; sys_power_metric:=1.0; move_pow_weight:=1.0; move_pow_metric:=1.0; move_eff_weight:=1.0; move_eff_metric:=1.0; safe_weight:=1.0; safe_metric:=1.0"/>
+		<Script code="charge_or_not='no_charge'; pic_rate:=3; task_weight:=1.0; task_metric:=-10.0; obj_power_weight:=1.0; obj_power_metric:=-10.0; sys_power_weight:=-10.0; sys_power_metric:=-10.0; move_pow_weight:=1.0; move_pow_metric:=-10.0; move_eff_weight:=1.0; move_eff_metric:=-10.0; safe_weight:=1.0; safe_metric:=-10.0"/>
 		
 		<RetryUntilSuccessful num_attempts="-1">
 			<getRobotPose topic_name="/odom" out_pose="{current_pose}" />
@@ -69,12 +69,12 @@
 									<Repeat num_cycles="{pic_rate}">
 										<DetectObjectsSavePower weight="{obj_power_weight}" metric="{obj_power_metric}" objs_identified="{objects_detected}" mean_metric="{obj_pow_mean_metric}">
 											<DetectObjectsEfficiently weight="{task_weight}" objs_identified="{objects_detected}" metric="{task_metric}" mean_metric="{task_mean_metric}" out_state="{obj_task_state}" >
-												<AdaptPictureRateOff adaptation_subject="pic_rate" in_power="{obj_power_metric}" in_pictask="{task_metric}" obstacles_total="{num_obstacles}" in_pictask_state="{obj_task_state}" out_pic_rate="{elastic_pic}">
+												<AdaptPictureRateOff adaptation_subject="pic_rate" in_power="{obj_power_metric}" in_pictask="{task_metric}" obstacles_total="{num_obstacles}" in_pictask_state="{obj_task_state}" out_pic_rate="{elastic_pic}" rotations_done="{rot_done}">
 													<Sequence>
 														<RetryUntilSuccessful num_attempts="-1">
 															<CameraFeed latest_image="{image_feed}" topic_name="/camera/image_raw"/>
 														</RetryUntilSuccessful>
-														<identifyObject in_camera_image="{image_feed}" objs_identified="{objects_detected}" name_of_task="{current_task}"/>
+														<NewIDObj pictures_taken="{rep_pic_take}" number_detected="{rep_num_ob}" service_name="/detect_object_srv" in_camera_image="{image_feed}" objs_identified="{objects_detected}" name_of_task="{current_task}"/>
 													</Sequence>
 												</AdaptPictureRateOff>
 											</DetectObjectsEfficiently>

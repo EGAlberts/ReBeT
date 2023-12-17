@@ -14,6 +14,7 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "diagnostic_msgs/msg/key_value.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
+#include "std_msgs/msg/float32.hpp"
 
 
 //Inspired by rclcpp/parameter_value.hpp
@@ -27,8 +28,7 @@ enum SystemAttributeType : uint8_t
   ATTRIBUTE_ODOM    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_ODOM,
   ATTRIBUTE_DIAG    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_DIAG,
   ATTRIBUTE_LASER    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_LASER,
-
-
+  ATTRIBUTE_FLOAT    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_FLOAT,
 };
 
 /// Return the name of a parameter type
@@ -67,6 +67,9 @@ public:
   explicit SystemAttributeValue(const diagnostic_msgs::msg::KeyValue diag_value);
 
   explicit SystemAttributeValue(const sensor_msgs::msg::LaserScan laser_value);
+
+  explicit SystemAttributeValue(const std_msgs::msg::Float32 float_value);
+
 
 
 
@@ -123,6 +126,17 @@ public:
       throw SystemAttributeTypeException(SystemAttributeType::ATTRIBUTE_LASER, get_type());
     }
     return value_.laser_value;
+  }
+
+  template<SystemAttributeType type>
+  constexpr
+  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_FLOAT, const std_msgs::msg::Float32 &>::type
+  get() const
+  {
+    if (value_.type != rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_FLOAT) {
+      throw SystemAttributeTypeException(SystemAttributeType::ATTRIBUTE_FLOAT, get_type());
+    }
+    return value_.float_value;
   }
 
   

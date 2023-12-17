@@ -46,6 +46,8 @@ public:
     PortsList base_ports = RosActionNode::providedPorts();
 
     PortsList child_ports = { 
+              OutputPort<std::string>("name_of_task"),
+
             };
 
     child_ports.merge(base_ports);
@@ -57,6 +59,8 @@ public:
   // send the request to the action server
   bool setGoal(RosActionNode::Goal& goal) override 
   {
+    setOutput("name_of_task",registrationName());
+
     // return true, if we were able to set the goal correctly.
     return true;
   }

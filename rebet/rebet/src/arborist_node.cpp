@@ -32,11 +32,16 @@
 #include "rebet_frog/get_map.h"
 #include "rebet_frog/find_frontier.h"
 #include "rebet_frog/dock_location.h"
+#include "rebet_frog/identify_object.h"
+
 
 
 
 #include "rebet_frog/frog_qrs.h"
 #include "rebet_frog/frog_adapt_nodes.h"
+
+#include "rebet_suave/suave_qrs.h"
+#include "rebet_suave/suave_adapt_nodes.h"
 
 
 #include "rebet/camera_feed_node.h"
@@ -141,6 +146,8 @@ public:
       registerTopicClient<RobotPoseNode>(factory,"bt_getpose_sub","getRobotPose");
       registerServiceClient<GetMap>(factory,"bt_getmap_cli","getMap");
       registerServiceClient<FindFrontier>(factory,"bt_findfrontier_cli","findFrontier");
+      registerServiceClient<IdentifyObjectService>(factory,"bt_detobj_srv_cli","NewIDObj");
+
       registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_frontier_client", "navigate_to_pose", "visitFrontier");
       registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_dock_client", "navigate_to_pose", "visitChargingDock");
       
@@ -158,11 +165,13 @@ public:
       factory.registerNodeType<MovementPowerQR>("MovementPowerQR");
 
 
-      factory.registerNodeType<SearchEfficiencyQR>("SearchEfficiencyQR");
+      factory.registerNodeType<SearchEfficiently>("SearchEfficiently");
+      factory.registerNodeType<MoveRobustly>("MoveRobustly");
       factory.registerNodeType<AdaptPictureRateOnline>("AdaptPictureRate");
       factory.registerNodeType<AdaptPictureRateOffline>("AdaptPictureRateOff");
 
       factory.registerNodeType<AdaptSpiralAltitudeOnline>("AdaptSpiralAltitude");
+      factory.registerNodeType<AdaptSpiralAltitudeOffline>("AdaptSpiralAltitudeOff");
       factory.registerNodeType<AdaptThrusterOffline>("AdaptThrusterRecovery");
       factory.registerNodeType<AdaptMaxSpeedOnline>("AdaptMaxSpeed");
       factory.registerNodeType<AdaptMaxSpeedOffline>("AdaptMaxSpeedOff");
@@ -172,7 +181,7 @@ public:
 
 
 
-      this->declare_parameter(BT_NAME_PARAM, "frog.xml");
+      this->declare_parameter(BT_NAME_PARAM, "frog_online.xml");
       this->declare_parameter(EXP_NAME_PARAM, "no_experiment_name");
 
       bt_name = this->get_parameter(BT_NAME_PARAM).as_string();
@@ -205,7 +214,7 @@ public:
           power_qr_node->initialize(max_pics_ps,
                                        pow_window_length);
         }
-        if (auto search_qr_node = dynamic_cast<SearchEfficiencyQR*>(node))
+        if (auto search_qr_node = dynamic_cast<SearchEfficiently*>(node))
         {
           search_qr_node->initialize(5);
         }
@@ -254,6 +263,7 @@ public:
 
     RosNodeParams params;
     params.nh = nh;
+    params.server_timeout = std::chrono::milliseconds(4000); //The YOLO can take quite a while.
     factory.registerNodeType<T>(name_in_xml, params);
 
   }
@@ -688,6 +698,8 @@ private:
     std::vector<std::string> pic_rates = {};
     std::vector<std::string> average_utilities = {};
     std::vector<std::string> task_names = {};
+    std::vector<std::string> rotations_done = {};
+
 
 
 
@@ -702,6 +714,12 @@ private:
     int time_since_last = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     NodeStatus result_of_tick;
     int total_elapsed = 0;
+    int time_limit = 500;
+
+
+    int spiral_search_time = 0;
+    int follow_pipeline_time = 0;
+    float distance_inspected = 0;
 
     do {
       // Check if there is a cancel request
@@ -740,7 +758,10 @@ private:
       goal_handle->publish_feedback(feedback);
       // RCLCPP_INFO(this->get_logger(), "Publish feedback");
 
-      if(total_elapsed >= 500)
+
+
+
+      if(total_elapsed >= time_limit)
       {
         result_of_tick = NodeStatus::SUCCESS;
       }
@@ -759,102 +780,144 @@ private:
           goal_handle->succeed(result);
           RCLCPP_INFO(this->get_logger(), "Goal finished: Done ticking the tree");
           
-          //Reporting on mission
-          std::vector<std::vector<float>> float_report_values = {average_safety_qrs, average_sys_power_qrs, average_mov_power_qrs, average_tsk_power_qrs, average_movement_qrs, average_task_qrs, safety_qrs, sys_power_qrs, mov_power_qrs, tsk_power_qrs, movement_qrs, out_pic_rates, task_qrs};
 
-          std::vector<std::string> report_strings = {};
-          for (auto const & thing_to_report : float_report_values)
+          if(bt_name == "frog.xml" || bt_name == "frog_norebet.xml")
           {
-            std::cout << "1len " << thing_to_report.size() << std::endl;
-            std::string value_as_string = "";
-            for (auto const & value_to_report : thing_to_report)
+            //Reporting on mission
+            std::vector<std::vector<float>> float_report_values = {average_safety_qrs, average_sys_power_qrs, average_mov_power_qrs, average_tsk_power_qrs, average_movement_qrs, average_task_qrs, safety_qrs, sys_power_qrs, mov_power_qrs, tsk_power_qrs, movement_qrs, out_pic_rates, task_qrs};
+
+            std::vector<std::string> report_strings = {};
+            for (auto const & thing_to_report : float_report_values)
             {
-              value_as_string += std::to_string(value_to_report);
-              value_as_string += ";";
+              std::cout << "1len " << thing_to_report.size() << std::endl;
+              std::string value_as_string = "";
+              for (auto const & value_to_report : thing_to_report)
+              {
+                value_as_string += std::to_string(value_to_report);
+                value_as_string += ";";
+              }
+              report_strings.push_back(value_as_string);
             }
-            report_strings.push_back(value_as_string);
-          }
 
-          std::vector<std::vector<std::string>> string_report_values = {task_qr_states, max_velocities, pic_rates, average_utilities, task_names};
+            std::vector<std::vector<std::string>> string_report_values = {task_qr_states, max_velocities, pic_rates, average_utilities, task_names, rotations_done};
 
-          for (auto const & thing_to_report : string_report_values)
-          {
-            std::cout << "2len " << thing_to_report.size() << std::endl;
-            
-            std::string value_as_string = "";
-            for (auto const & value_to_report : thing_to_report)
+            for (auto const & thing_to_report : string_report_values)
             {
-              value_as_string += value_to_report;
-              value_as_string += ";";
+              std::cout << "2len " << thing_to_report.size() << std::endl;
+              
+              std::string value_as_string = "";
+              for (auto const & value_to_report : thing_to_report)
+              {
+                value_as_string += value_to_report;
+                value_as_string += ";";
+              }
+              report_strings.push_back(value_as_string);
             }
-            report_strings.push_back(value_as_string);
+
+            auto curr_time_pointer = std::chrono::system_clock::now();
+            int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
+
+            // file pointer
+            std::fstream fout;
+          
+            // opens an existing csv file or creates a new file.
+            fout.open("rebet_results.csv", std::ios::out | std::ios::app);
+          
+
+
+
+
+            // Header
+            fout << "timestamp" << ", " 
+                << "average_safety_qrs" << ", "
+                << "average_sys_power_qrs" << ", "
+                << "average_mov_power_qrs" << ", "
+                << "average_tsk_power_qrs" << ", "
+                << "average_movement_qrs" << ", "
+                << "average_task_qrs" << ", "
+                << "safety_qrs" << ", "
+                << "sys_power_qrs" << ", "
+                << "movement_power_qrs" << ", "
+                << "task_power_qrs" << ", "
+                << "movement_qrs" << ", "
+                << "out_pic_rates" << ", "
+                << "task_qrs" << ", "
+                << "task_qr_state" << ", "
+                << "max_velocities" << ", "
+                << "pic_rates" << ", "
+                << "average_utilities" << ", "
+                << "current_task" << ", "
+                << "rotations_done" << ", "
+                << "pictures_taken_total" << ", "
+                << "anything_detected_total" << ", "
+                << "bt_name" << "\n";
+
+
+            fout << current_time << ", ";
+
+            for (auto const & thing_to_report : report_strings)
+            {
+              fout << thing_to_report << ", ";
+
+            }
+            fout << getFloatOrNot("rep_pic_take") << ", ";
+            fout << getFloatOrNot("rep_num_ob") << ", "; 
+
+            fout << bt_name << "\n";
+            // // Insert the data to file
+            // fout << current_time << ", " 
+            //     << id_picture_rate << ", "
+            //     << avg_task_metric << ", "
+            //     << avg_power_metric << ", "
+            //     << id_time_elapsed << ", "
+            //     << id_det_threshold << ", "
+            //     << experiment_name << ", "
+            //     << bt_name << ", "
+            //     << average_utility << "\n";
+
+              
+            fout.close();
+
+            std::ofstream outfile ("mission.done");
+
+            outfile << "." << std::endl;
+
+            outfile.close();
           }
-
-          auto curr_time_pointer = std::chrono::system_clock::now();
-          int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
-
-          // file pointer
-          std::fstream fout;
-        
-          // opens an existing csv file or creates a new file.
-          fout.open("rebet_results.csv", std::ios::out | std::ios::app);
-        
-
-
-
-
-          // Header
-          fout << "timestamp" << ", " 
-               << "average_safety_qrs" << ", "
-               << "average_sys_power_qrs" << ", "
-               << "average_mov_power_qrs" << ", "
-               << "average_tsk_power_qrs" << ", "
-               << "average_movement_qrs" << ", "
-               << "average_task_qrs" << ", "
-               << "safety_qrs" << ", "
-               << "sys_power_qrs" << ", "
-               << "movement_power_qrs" << ", "
-               << "task_power_qrs" << ", "
-               << "movement_qrs" << ", "
-               << "out_pic_rates" << ", "
-               << "task_qrs" << ", "
-               << "task_qr_state" << ", "
-               << "max_velocities" << ", "
-               << "pic_rates" << ", "
-               << "average_utilities" << ", "
-               << "current_task" << ", "
-               << "bt_name" << "\n";
-
-
-          fout << current_time << ", ";
-
-          for (auto const & thing_to_report : report_strings)
+          if(bt_name == "suave_offline.xml")
           {
-            fout << thing_to_report << ", ";
+            // file pointer
+            std::fstream fout;
+            // opens an existing csv file or creates a new file.
+            fout.open("suave_rebet_results.csv", std::ios::out | std::ios::app);
+          
 
+            auto curr_time_pointer = std::chrono::system_clock::now();
+
+
+
+            int curr_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
+
+            // Header
+            fout << "timestamp" << "," 
+                << "search time" << ","
+                << "distance covered" << ","
+                << "bt_name" << "\n";
+
+
+            fout << curr_time << ", ";
+            fout << spiral_search_time << ", ";
+            fout << distance_inspected << ", ";
+            fout << bt_name << "\n";
+              
+            fout.close();
+
+            std::ofstream outfile ("mission.done");
+
+            outfile << "." << std::endl;
+
+            outfile.close();
           }
-
-          fout << bt_name << "\n";
-          // // Insert the data to file
-          // fout << current_time << ", " 
-          //     << id_picture_rate << ", "
-          //     << avg_task_metric << ", "
-          //     << avg_power_metric << ", "
-          //     << id_time_elapsed << ", "
-          //     << id_det_threshold << ", "
-          //     << experiment_name << ", "
-          //     << bt_name << ", "
-          //     << average_utility << "\n";
-
-            
-          fout.close();
-
-          std::ofstream outfile ("mission.done");
-
-          outfile << "." << std::endl;
-
-          outfile.close();
-
           break;
         }
 
@@ -862,6 +925,7 @@ private:
       else{
         //While running..
         auto curr_time_pointer = std::chrono::system_clock::now();
+
 
         int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
         int elapsed_seconds = current_time-time_since_last;
@@ -872,8 +936,49 @@ private:
           RCLCPP_INFO(this->get_logger(), "one second passed");
           time_since_last = current_time;
 
-          if(bt_name == "frog.xml")
+
+          if(bt_name == "suave_offline.xml")
           {
+            time_limit = 300;
+            std::string task1 = "SpiralSearch";
+            std::string task2 = "FollowPipeline";
+
+            std::string current_task = getStringOrNot("current_task");
+
+            if(current_task == task1)
+            {
+              spiral_search_time+=1;
+            }
+
+
+            rebet::SystemAttributeValue _value_to_get;
+            bool gotten = false;
+            try
+            {
+              gotten = tree.rootBlackboard()->get<rebet::SystemAttributeValue>("distance_inspected",_value_to_get);
+            }
+            catch (const std::runtime_error& error)
+            {
+              gotten = false;   
+            }
+
+            if(gotten)
+            {
+              std_msgs::msg::Float32 as_val = _value_to_get.get<rebet::SystemAttributeType::ATTRIBUTE_FLOAT>();
+              distance_inspected = as_val.data;
+            }
+
+
+
+
+
+
+
+          }
+          else if(bt_name == "frog.xml" || bt_name == "frog_norebet.xml")
+          {
+            RCLCPP_INFO(this->get_logger(), "\n\nloggingggg\n\n");
+
             std::string charge_status = getStringOrNot("charge_or_not");
 
             std::cout << "CHARGE STATUS: " << charge_status << std::endl;
@@ -925,6 +1030,8 @@ private:
             average_utilities.push_back(getStringOrNot("average_utility"));
 
             task_names.push_back(getStringOrNot("current_task"));
+
+            rotations_done.push_back(getStringOrNot("rot_done"));
 
            
           }

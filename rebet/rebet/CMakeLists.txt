@@ -59,6 +59,7 @@ install(PROGRAMS
   scripts/tree_action_client.py
   scripts/save_map_client.py
   scripts/weights_set_client.py
+  scripts/yolo_as_a_service.py
   scripts/testing.py
 
   DESTINATION lib/${PROJECT_NAME}

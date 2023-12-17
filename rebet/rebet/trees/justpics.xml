@@ -6,7 +6,7 @@
             <RetryUntilSuccessful num_attempts="-1">
                 <CameraFeed latest_image="{image_feed}" topic_name="/camera/image_raw"/>
             </RetryUntilSuccessful>
-            <identifyObject in_camera_image="{image_feed}" objs_identified="{objects_detected}" name_of_task="{current_task}"/>
+            <NewIDObj service_name="/detect_object_srv" in_camera_image="{image_feed}" objs_identified="{objects_detected}" name_of_task="{current_task}"/>
         </Sequence>
     </Repeat>
 				

@@ -36,6 +36,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/RequestAdaptation.srv"
   "srv/OnlineAdaptation.srv"
   "srv/OfflineAdaptation.srv"
+  "srv/DetectObject.srv"
   "msg/ObjectsIdentified.msg"
   "msg/QR.msg"
   "msg/VariableParameter.msg"

@@ -1,47 +1,122 @@
-#Experiment1
-HYP=("none" "['epsilon','0.2']" "['epsilon','1.0','decay_rate','1.09']")
-BANDITS=("UCB" "egreedy" "egreedy")
+#!/bin/bash
+
+trap ctrl_c INT
+
+function ctrl_c() {
+        echo "Cleaning up.."
+	./killall.sh
+        echo "Shutting down"
+        exit 0
+}
 
 
-ADAPPERIOD=16
-DETTHRESH=14
-for DETRATE in 1 3 5 7
+cd scripts
+
+
+for EXPNUM in {1..10}
 do
-      for EXPNUM in {1..30}
-      do
-            ./scripts/onlyid.sh EvaluationOne $ADAPPERIOD $ADAPPERIOD none none none $ADAPPERIOD $DETRATE $DETTHRESH
-            SECONDS=0 
-            while [ ! -f ~/rebet_ws/scripts/mission.done -a $SECONDS -lt 1680 ]
-            do
-                  echo "waiting for mission to be done" $EXP             
-            sleep 10 #sustainability!
-            done
-            echo "mission done"
-            rm ~/rebet_ws/scripts/mission.done
-            ./scripts/killall.sh
+	gnome-terminal -- ./darknet.sh
+	sleep 15
+	gnome-terminal -- ./frontier_service.sh
+	sleep 3
+	gnome-terminal -- ./docker_gazebo_tb3.sh false 1
+	sleep 15
+	gnome-terminal -- ./nav2.sh 
+	sleep 15
+	gnome-terminal -- ./arborist.sh test frog_online.xml 0 0
+	sleep 3
+	gnome-terminal -- ./sys_refl.sh
+	sleep 3
+	gnome-terminal -- ./adap_sys.sh
+	sleep 3
+	gnome-terminal -- ./tree_action.sh 
+	SECONDS=0 
+	while [ ! -f ~/rebet_ws/scripts/mission.done -a $SECONDS -lt 700 ]
+	do
+	   echo "waiting for mission to be done" $EXP             
+	sleep 10 #sustainability!
+	done
+	echo "mission done"
+	rm ~/rebet_ws/scripts/mission.done
+	./docker_kill_gazebo.sh	
+	./killall.sh	
+done
 
-      done
+for EXPNUM in {1..10}
+do
+	gnome-terminal -- ./darknet.sh
+	sleep 15
+	gnome-terminal -- ./frontier_service.sh
+	sleep 3
+	gnome-terminal -- ./docker_gazebo_tb3.sh true 1
+	sleep 15
+	gnome-terminal -- ./nav2.sh 
+	sleep 15
+	gnome-terminal -- ./arborist.sh test frog.xml 0 0
+	sleep 3
+	gnome-terminal -- ./sys_refl.sh
+	sleep 3
+	gnome-terminal -- ./adap_sys.sh
+	sleep 3
+	gnome-terminal -- ./tree_action.sh 
+	SECONDS=0 
+	while [ ! -f ~/rebet_ws/scripts/mission.done -a $SECONDS -lt 700 ]
+	do
+	   echo "waiting for mission to be done" $EXP             
+	sleep 10 #sustainability!
+	done
+	echo "mission done"
+	rm ~/rebet_ws/scripts/mission.done
+	./docker_kill_gazebo.sh	
+	./killall.sh	
+done
+
+for EXPNUM in {1..10}
+do
+	gnome-terminal -- ./darknet.sh
+	sleep 15
+	gnome-terminal -- ./frontier_service.sh
+	sleep 3
+	gnome-terminal -- ./docker_gazebo_tb3.sh false 1
+	sleep 15
+	gnome-terminal -- ./nav2.sh 
+	sleep 15
+	gnome-terminal -- ./arborist.sh test frog_norebet.xml 0 0
+	sleep 3
+	gnome-terminal -- ./sys_refl.sh
+	sleep 3
+	gnome-terminal -- ./tree_action.sh 
+	SECONDS=0 
+	while [ ! -f ~/rebet_ws/scripts/mission.done -a $SECONDS -lt 700 ]
+	do
+	   echo "waiting for mission to be done" $EXP             
+	sleep 10 #sustainability!
+	done
+	echo "mission done"
+	rm ~/rebet_ws/scripts/mission.done
+	./docker_kill_gazebo.sh	
+	./killall.sh	
 done
 
 
-
-ADAPPERIOD=8
-DETTHRESH=21
-
-for BANDITNUM in 0 1 2
+for EXPNUM in {1..20}
 do
-      for EXPNUM in {1..30}
-      do
-            ./scripts/onlyid.sh EvaluationTwo $ADAPPERIOD $ADAPPERIOD bandit ${BANDITS[BANDITNUM]} ${HYP[BANDITNUM]} $ADAPPERIOD none $DETTHRESH
-            SECONDS=0 
-            while [ ! -f ~/rebet_ws/scripts/mission.done -a $SECONDS -lt 2520 ]
-            do
-                  echo "waiting for mission to be done" $EXP             
-            sleep 10 #sustainability!
-            done
-            echo "mission done"
-            rm ~/rebet_ws/scripts/mission.done
-            ./scripts/killall.sh
-
-      done
+	gnome-terminal -- ./launch_suave_sim.sh
+	sleep 60
+	gnome-terminal -- ./arborist.sh test suave_offline.xml 0 0
+	sleep 3
+	gnome-terminal -- ./sys_refl.sh
+	sleep 3
+	gnome-terminal -- ./adap_sys.sh
+	sleep 3
+	gnome-terminal -- ./tree_action.sh 
+	SECONDS=0 
+	while [ ! -f ~/rebet_ws/scripts/mission.done -a $SECONDS -lt 600 ]
+	do
+	   echo "waiting for mission to be done" $EXP             
+	sleep 10 #sustainability!
+	done
+	echo "mission done"
+	rm ~/rebet_ws/scripts/mission.done
+	./killall.sh	
 done

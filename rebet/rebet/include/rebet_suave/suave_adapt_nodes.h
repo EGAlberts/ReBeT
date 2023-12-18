@@ -83,7 +83,7 @@ class AdaptSpiralAltitudeOffline : public AdaptPeriodicallyOnRunning<double>
       }
 
 
-      _current_altitude = _current_altitude;
+      _current_altitude = altitude_value;
 
       std::string param_name;
       std::string node_name;
@@ -99,6 +99,8 @@ class AdaptSpiralAltitudeOffline : public AdaptPeriodicallyOnRunning<double>
 
       _offline_adaptations.push_back(adap);
         std::cout << "altitude adjustment " << altitude_value << "\n\n" << std::endl;
+        std::cout << "altitude adjustment " << adap_param.to_parameter_msg().value.double_value << "\n\n" << std::endl;
+
 
 
       return true;
@@ -126,11 +128,11 @@ class AdaptSpiralAltitudeOffline : public AdaptPeriodicallyOnRunning<double>
         {
           std::cout << "now here curr_search " << current_search << std::endl;
 
-          if(current_search >= 0.8) // 3.25 (from SUAVE) normalized
+          if(current_search >= 3.25) // 3.25 (from SUAVE) normalized
           {
             return altitude_adaptation_msg(ALT_HIGH);
           }
-          else if(current_search >= 0.4)  // 2.25 (from SUAVE) normalized
+          else if(current_search >= 2.25)  // 2.25 (from SUAVE) normalized
           {
             return altitude_adaptation_msg(ALT_MED);
           }

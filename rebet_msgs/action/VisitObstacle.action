@@ -1,5 +1,0 @@
-nav_msgs/OccupancyGrid map
----
-float32 time_elapsed
----
-rebet_msgs/ObjectsIdentified obj_idd

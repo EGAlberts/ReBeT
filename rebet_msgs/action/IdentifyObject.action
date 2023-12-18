@@ -1,6 +1,0 @@
----
-float32 time_elapsed
-int32 picture_rate
----
-int32 picture_rate
-rebet_msgs/ObjectsIdentified obj_idd

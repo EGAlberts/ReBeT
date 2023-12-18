@@ -10,7 +10,7 @@ Behavior Trees to meet Quality Requirements through Multi-armed Bandits at runti
 3. [Gazebo classic](http://classic.gazebosim.org/)
 
 ## Prerequisites
-As it stands, ROS2 is only fully functional on Linux system. ROS2 Humble requires at least Ubuntu 22 (or equivalent). If you do not or are not willing to intstall Ubuntu on your device, we recommend a docker container, for example: https://hub.docker.com/r/kasmweb/ubuntu-jammy-desktop
+As it stands, ROS2 is only fully functional on a Linux system. ROS2 Humble requires at least Ubuntu 22 (or equivalent). If you do not or are not willing to install Ubuntu on your device, we recommend a docker container, for example: https://hub.docker.com/r/kasmweb/ubuntu-jammy-desktop
 
 Within the docker container you can follow the steps in the Installation section.
 
@@ -34,4 +34,6 @@ In darknet_ros/launch/darknet_ros.launch.py you change node_executable and node_
 We provide a singular script which runs all the experiments from the paper. Keep in mind that actually running them in succession take as long as 120 hours.
 To run them you use the command from within the root of your workspace folder `./scripts/SEAMS24Reproduction.sh`
 
-The result of each run get placed in a csv inside the scripts folder called rebet_results.csv. Inquire the code inside the arborist node to see what each field is and where it comes from. If the run involves a bandit is also records its progress to a csv called bandit_report.csv in the same foldeer.
+The result of each run get placed in a csv inside the scripts folder called rebet\_results.csv. Inquire the code inside the arborist node to see what each field is and where it comes from. If the run involves a bandit is also records its progress to a csv called bandit_report.csv in the same folder.
+
+However, for the double-blind we could not provide the docker container we use to run the Gazebo simulator neither a fork of SUAVE.

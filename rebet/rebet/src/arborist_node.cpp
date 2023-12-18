@@ -181,7 +181,7 @@ public:
 
 
 
-      this->declare_parameter(BT_NAME_PARAM, "frog_online.xml");
+      this->declare_parameter(BT_NAME_PARAM, "suave_offline.xml");
       this->declare_parameter(EXP_NAME_PARAM, "no_experiment_name");
 
       bt_name = this->get_parameter(BT_NAME_PARAM).as_string();
@@ -561,32 +561,7 @@ private:
 
   }
 
-  // std::vector<TreeNode::Ptr> get_tree_variable_acs()
-  // {    
-  //   std::cout << "2 Service to get a variable nodes from the blackboard" << std::endl;
 
-  //   std::vector<TreeNode::Ptr> variable_decorator_nodes;
-
-  //   for (auto const & sbtree : tree.subtrees) 
-  //   {
-  //     for (auto & node : sbtree->nodes) 
-  //     {
-  //       auto node_config = node->config();
-
-  //       if(node->type() == NodeType::DECORATOR && (node_config.output_ports.find(AdaptNode::VARIABLE_PARAMS) != node_config.output_ports.end()))
-  //       {
-  //         variable_decorator_nodes.push_back(node);
-  //       }
-  //       // if(auto var_ac_node = dynamic_cast<ActionNodeBase*>(static_cast<TreeNode*>(node.get())))
-  //       // {
-  //       //   variable_action_nodes.push_back(var_ac_node);
-  //       // }
-  //     }
-  //   }
-  //   std::cout << "2 End Service to get a variable nodes from the blackboard " << variable_decorator_nodes.size() << std::endl;
-
-  //   return variable_decorator_nodes;
-  // }
   
   void handle_get_qr(const std::shared_ptr<GetQR::Request> request,
         std::shared_ptr<GetQR::Response> response)
@@ -612,44 +587,6 @@ private:
 
   }
 
-  // void handle_get_var_params(const std::shared_ptr<GetVParams::Request> request,
-  //       std::shared_ptr<GetVParams::Response> response)
-  // {
-  //   std::cout << "1 Service to get a variable nodes from the blackboard" << std::endl;
-  
-  //   auto var_nodes = get_tree_variable_acs();
-  //   for (auto & node : var_nodes) 
-  //   {
-  //     if(node->status() == NodeStatus::RUNNING) //ensures that the actions are currently in effect.
-  //     {
-  //     auto node_config = node->config();
-
-  //     auto var_params = node_config.output_ports.find(VariableActionNodeBase::VARIABLE_PARAMS); //this is safe because the previous method guarantees the presence of this port.
-
-  //     // if (var_params == node_config.output_ports.end())
-  //     // {
-  //     //   std::stringstream ss;
-  //     //   ss << "Output port " << VariableActionNode<ActionT>::VARIABLE_PARAMS << " not found within the variable action node " << node->registrationName();
-  //     //   RCLCPP_ERROR(this->get_logger(), ss.str().c_str());
-  //     //   return;
-  //     // }
-
-  //     auto var_bb_value = tree.rootBlackboard()->get<VariableParameters>((std::string)TreeNode::stripBlackboardPointer(var_params->second));
-  //     //Each variable action node can provide one or more changeable parameters.
-
-  //     for (auto var_param : var_bb_value.variable_parameters)
-  //     {
-  //       response->variables_in_tree.variable_parameters.push_back(var_param); //We put all of these parameters that may change into a singular list. 
-  //       //Potentially we may want a list of these lists to keep them distinct.. 
-  //     }
-  //     }
-  //   }
-  //     std::cout << "1 End Service to get a variable nodes from the blackboard " << response->variables_in_tree.variable_parameters.size() << std::endl;
-
-  // }
-  
-
-  
 
   void handle_set_weights(const std::shared_ptr<SetWeights::Request> request,
         std::shared_ptr<SetWeights::Response> response)
@@ -781,7 +718,7 @@ private:
           RCLCPP_INFO(this->get_logger(), "Goal finished: Done ticking the tree");
           
 
-          if(bt_name == "frog.xml" || bt_name == "frog_norebet.xml")
+          if(bt_name == "frog.xml" || bt_name == "frog_norebet.xml" || bt_name == "frog_online.xml")
           {
             //Reporting on mission
             std::vector<std::vector<float>> float_report_values = {average_safety_qrs, average_sys_power_qrs, average_mov_power_qrs, average_tsk_power_qrs, average_movement_qrs, average_task_qrs, safety_qrs, sys_power_qrs, mov_power_qrs, tsk_power_qrs, movement_qrs, out_pic_rates, task_qrs};
@@ -864,16 +801,6 @@ private:
             fout << getFloatOrNot("rep_num_ob") << ", "; 
 
             fout << bt_name << "\n";
-            // // Insert the data to file
-            // fout << current_time << ", " 
-            //     << id_picture_rate << ", "
-            //     << avg_task_metric << ", "
-            //     << avg_power_metric << ", "
-            //     << id_time_elapsed << ", "
-            //     << id_det_threshold << ", "
-            //     << experiment_name << ", "
-            //     << bt_name << ", "
-            //     << average_utility << "\n";
 
               
             fout.close();
@@ -975,7 +902,7 @@ private:
 
 
           }
-          else if(bt_name == "frog.xml" || bt_name == "frog_norebet.xml")
+          else if(bt_name == "frog.xml" || bt_name == "frog_norebet.xml" || bt_name == "frog_online.xml")
           {
             RCLCPP_INFO(this->get_logger(), "\n\nloggingggg\n\n");
 

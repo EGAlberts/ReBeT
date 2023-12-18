@@ -13,7 +13,7 @@
 					</Sequence>
 					</RetryUntilSuccessful>
 						<SearchEfficiently in_water_visibility="{water_visibility}" weight="{se_weight}" metric="{se_metric}"  >
-							<AdaptSpiralAltitudeOff search_efficiency="{se_metric}" adaptation_subject="spiral_altitude" subject_location="f_generate_search_path_node" adaptation_period="10">
+							<AdaptSpiralAltitudeOff search_efficiency="{se_metric}" adaptation_subject="spiral_altitude" subject_location="f_generate_search_path_node" adaptation_period="3">
 								<SpiralSearch name_of_task="{current_task}"/>
 							</AdaptSpiralAltitudeOff>
 						</SearchEfficiently>

@@ -445,7 +445,7 @@ class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
 
       std::vector<double> chosen_speeds = parameter_object.get<std::vector<double>>();
 
-      double chosen_max_speed = chosen_speeds[0]
+      double chosen_max_speed = chosen_speeds[0];
     
       double current_safety;
       double current_power;

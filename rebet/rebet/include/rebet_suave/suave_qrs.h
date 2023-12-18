@@ -170,9 +170,18 @@ class SearchEfficiently : public TaskLevelQR
           _keyvalue_msg = _watervis_attribute.get<rebet::SystemAttributeType::ATTRIBUTE_DIAG>();
           float water_visibility = std::stof(_keyvalue_msg.value);
 
-          _water_visibilities.push_back(water_visibility);
+          // _water_visibilities.push_back(water_visibility);
 
           _last_timestamp = as_sysatt_msg.header.stamp;
+
+
+          _metric =  water_visibility;
+
+
+          output_metric();
+          metric_mean();
+
+          setOutput(MEAN_METRIC,_average_metric);
 
           std::cout << "new water vis received " << water_visibility; 
         }
@@ -180,22 +189,22 @@ class SearchEfficiently : public TaskLevelQR
 
       
 
-      auto curr_time_pointer = std::chrono::system_clock::now();
+      // auto curr_time_pointer = std::chrono::system_clock::now();
       
-      int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
-      int elapsed_seconds = current_time-_window_start;
-      if(elapsed_seconds >= _window_length)
-      {
-        float wvis_sum = std::accumulate(_water_visibilities.begin(), _water_visibilities.end(), 0);
-        float average_water_vis = wvis_sum / (float)_water_visibilities.size();
-        _metric = (average_water_vis - _min_wvis) / (_max_wvis - _min_wvis);
+      // int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
+      // int elapsed_seconds = current_time-_window_start;
+      // if(elapsed_seconds >= _window_length)
+      // {
+      //   float wvis_sum = std::accumulate(_water_visibilities.begin(), _water_visibilities.end(), 0);
+      //   float average_water_vis = wvis_sum / (float)_water_visibilities.size();
+      //   _metric = (average_water_vis - _min_wvis) / (_max_wvis - _min_wvis);
 
-        output_metric();
-        metric_mean();
-        setOutput(MEAN_METRIC,_average_metric);
-        _window_start = current_time;
-        _water_visibilities = {};
-      }
+      //   output_metric();
+      //   metric_mean();
+      //   setOutput(MEAN_METRIC,_average_metric);
+      //   _window_start = current_time;
+      //   _water_visibilities = {};
+      // }
 
     }
 

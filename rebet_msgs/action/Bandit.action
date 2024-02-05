@@ -1,6 +1,0 @@
-string bandit_name
-string[] hyperparameters
----
-float32 average_reward
----
-string chosen_arm

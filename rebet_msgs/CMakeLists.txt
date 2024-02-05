@@ -13,31 +13,44 @@ find_package(ament_cmake REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
+find_package(lifecycle_msgs REQUIRED)
 find_package(rcl_interfaces REQUIRED)
+
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/BehaviorTree.action"
   "action/SLAM.action"
   "action/Identify.action"
+  "action/IdentifyObject.action"
   "srv/SetBlackboard.srv"
   "srv/GetBlackboard.srv"
   "srv/GetQR.srv"
   "srv/GetVariableParams.srv"
   "srv/SetWeights.srv"
-  "srv/SetAttributeInBlackboard.srv"
+  "srv/SetAttributesInBlackboard.srv"
+  "srv/SetParameterInBlackboard.srv"
+  "srv/AdaptSystem.srv"
+  "srv/RequestAdaptation.srv"
+  "srv/OnlineAdaptation.srv"
+  "srv/OfflineAdaptation.srv"
+  "srv/DetectObject.srv"
   "msg/ObjectsIdentified.msg"
   "msg/QR.msg"
   "msg/VariableParameter.msg"
   "msg/VariableParameters.msg"
   "msg/AdaptationState.msg"
+  "msg/Adaptation.msg"
+  "msg/AdaptationOptions.msg"
   "msg/Configuration.msg"
   "msg/QRValue.msg"
   "msg/SystemAttributeValue.msg"
   "msg/SystemAttributeType.msg"
   "msg/SystemAttribute.msg"
 
-  DEPENDENCIES builtin_interfaces geometry_msgs nav_msgs rcl_interfaces
+  DEPENDENCIES builtin_interfaces geometry_msgs nav_msgs rcl_interfaces diagnostic_msgs lifecycle_msgs sensor_msgs
 )
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

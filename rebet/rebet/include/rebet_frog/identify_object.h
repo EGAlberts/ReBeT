@@ -9,13 +9,14 @@ using namespace BT;
 #include <vector>
 #include <algorithm>
 #include "rebet_msgs/srv/detect_object.hpp"
+#include "rebet_msgs/msg/objects_identified.hpp"
 #include "behaviortree_ros2/bt_service_node.hpp"
 #include <math.h>
 #include "nav_msgs/msg/odometry.hpp"
 
 using DetectObject = rebet_msgs::srv::DetectObject;
 using Image = sensor_msgs::msg::Image;
-
+using ObjectsIdentified = rebet_msgs::msg::ObjectsIdentified;
 
 class IdentifyObjectService : public RosServiceNode<DetectObject>
 {
@@ -44,7 +45,7 @@ public:
     PortsList base_ports = RosServiceNode::providedPorts();
 
     PortsList child_ports = { 
-                InputPort<Image>(IMG_IN),
+              InputPort<Image>(IMG_IN),
               OutputPort<ObjectsIdentified>(OBJ_OUT),
               OutputPort<std::string>("name_of_task"),
               OutputPort<int>(PICS_TAKEN),

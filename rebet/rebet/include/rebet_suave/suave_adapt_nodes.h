@@ -26,11 +26,9 @@ class AdaptSpiralAltitudeOnline : public AdaptPeriodicallyOnRunning<double>
     AdaptSpiralAltitudeOnline(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::Online)
     {
       registerAdaptations();
-
       //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.
   
     }
-
 
     virtual double utility_of_adaptation(rcl_interfaces::msg::Parameter ros_parameter) override
     {

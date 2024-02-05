@@ -13,7 +13,6 @@ find_package(rclpy REQUIRED)
 find_package(behaviortree_ros2 REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
 find_package(rebet_msgs REQUIRED)
-find_package(darknet_ros_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
@@ -37,7 +36,7 @@ include_directories(include)
 # Create Cpp executable
 add_executable(arborist src/arborist_node.cpp src/system_attribute_value.cpp)
 
-ament_target_dependencies(arborist rclcpp behaviortree_ros2 behaviortree_cpp rebet_msgs lifecycle_msgs diagnostic_msgs geometry_msgs nav_msgs nav2_msgs sensor_msgs darknet_ros_msgs slam_toolbox suave_msgs mavros_msgs wavefront_frontier_msgs)
+ament_target_dependencies(arborist rclcpp behaviortree_ros2 behaviortree_cpp rebet_msgs lifecycle_msgs diagnostic_msgs geometry_msgs nav_msgs nav2_msgs sensor_msgs slam_toolbox suave_msgs mavros_msgs wavefront_frontier_msgs)
 
 # Install Cpp executables
 install(TARGETS
@@ -50,8 +49,6 @@ ament_python_install_package(${PROJECT_NAME})
 
 # Install Python executables
 install(PROGRAMS
-  scripts/SLAM_action_server.py
-  scripts/ID_action_server.py
   scripts/blackboard_set_client.py
   scripts/blackboard_get_client.py
   scripts/adaptation_manager_node.py
@@ -60,7 +57,6 @@ install(PROGRAMS
   scripts/save_map_client.py
   scripts/weights_set_client.py
   scripts/yolo_as_a_service.py
-  scripts/testing.py
 
   DESTINATION lib/${PROJECT_NAME}
 )

@@ -1,5 +1,5 @@
 # ReBeT
-Re-configuable Behavior Trees
+Re-configurable Behavior Trees
 
 Behavior Trees to meet Quality Requirements through Multi-armed Bandits at runtime in ROS 2.
 

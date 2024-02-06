@@ -7,4 +7,7 @@ repositories:
     type: git
     url: https://github.com/EGAlberts/wavefront_frontier_exploration.git
     version: b673ae9
+  mavros_msgs:
+    type: git
+    url: https://github.com/EGAlberts/mavros_msgs.git
 

@@ -1,0 +1,10 @@
+repositories:
+  behaviortree_ros2:
+    type: git
+    url: https://github.com/BehaviorTree/BehaviorTree.ROS2.git
+    version: d701cc8
+  wavefront_frontier_exploration:
+    type: git
+    url: https://github.com/EGAlberts/wavefront_frontier_exploration.git
+    version: b673ae9
+

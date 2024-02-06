@@ -22,9 +22,6 @@ find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/BehaviorTree.action"
-  "action/SLAM.action"
-  "action/Identify.action"
-  "action/IdentifyObject.action"
   "srv/SetBlackboard.srv"
   "srv/GetBlackboard.srv"
   "srv/GetQR.srv"
@@ -32,8 +29,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetWeights.srv"
   "srv/SetAttributesInBlackboard.srv"
   "srv/SetParameterInBlackboard.srv"
-  "srv/AdaptSystem.srv"
-  "srv/RequestAdaptation.srv"
   "srv/OnlineAdaptation.srv"
   "srv/OfflineAdaptation.srv"
   "srv/DetectObject.srv"

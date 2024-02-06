@@ -24,8 +24,6 @@
 
 #include "rebet/system_attribute_value.hpp"
 
-#include "rebet_frog/slam_action_node.h"
-#include "rebet_frog/identifyobject_action_node.h"
 #include "rebet_frog/gotopose_action_node.h"
 #include "rebet_frog/initial_pose.h"
 #include "rebet_frog/filter_obstacles.h"
@@ -59,7 +57,7 @@
 #include "rebet_suave/confirm_mavros_status.h"
 
 
-
+#include "behaviortree_cpp/loggers/groot2_publisher.h"
 
 
 
@@ -127,8 +125,7 @@ public:
 
       //I suppose here you register all the possible custom nodes, and the determination as to whether they are actually used lies in the xml tree provided.
 
-      registerActionClient<SLAMAction>(factory, "bt_slam_client", "slam", "SLAMfd");
-      registerActionClient<IdentifyObjectAction>(factory, "bt_identifyobject_client", "checkForObjectsActionName", "identifyObject");
+      // registerActionClient<IdentifyObjectAction>(factory, "bt_identifyobject_client", "checkForObjectsActionName", "identifyObject");
       
       registerActionClient<SpiralSearch>(factory, "bt_spiral_client", "spiral", "SpiralSearch");
       registerActionClient<FollowPipeline>(factory, "bt_follow_client", "follow", "FollowPipeline");
@@ -190,6 +187,8 @@ public:
       RCLCPP_INFO(this->get_logger(), bt_name.c_str());
 
       tree = factory.createTreeFromFile(tree_dir + bt_name);
+
+      BT::Groot2Publisher publisher(tree);
 
       this->declare_parameter(MSN_MAX_OBJ_PS_NAME, 0.14);
       this->declare_parameter(ENG_MAX_PIC_PS_NAME, 0.4);

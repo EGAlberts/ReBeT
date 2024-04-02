@@ -23,8 +23,7 @@ Within the docker container you can follow the steps in the Installation section
 
 4. Clone particular commit from BehaviorTree.ROS2: `git clone https://github.com/BehaviorTree/BehaviorTree.ROS2/tree/9ed45e92bee2d694789a4db6703234a1da0b8681` and also place it within the src folder. .
 
-5. Download darknet and darknet-ros by cloning darknet-ROS recursively: `git clone --recurse-submodules -j8 https://github.com/leggedrobotics/darknet_ros.git` and also placed them within the src folder. A small change needs to be made to a one file in its code:
-In darknet_ros/launch/darknet_ros.launch.py you change node_executable and node_name to just executable and name.
+5. Install ultralytics:  https://github.com/ultralytics
 
 6. Install masced_bandits python library: `pip install masced-bandits`
 

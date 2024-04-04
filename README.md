@@ -23,11 +23,13 @@ Within the docker container you can follow the steps in the Installation section
 
 4. In the root of your workspace folder, use the following command `vcs import src < rebet.rosinstall --recursive` to clone and place the dependencies in the src folder.
 
-5. Install ultralytics:  https://github.com/ultralytics
+5. Run the following command to install a dependency of mavros_msgs (which is within rebet.rosinstall) `sudo -H apt-get install -y ros-humble-geographic-msgs`
 
-6. Install masced_bandits python library: `pip install masced-bandits`
+6. Install ultralytics:  https://github.com/ultralytics
 
-7. Run `colcon build` in the root of your workspace folder to build all the packages.
+7. Install masced_bandits python library: `pip install masced-bandits`
+
+8. Run `colcon build` in the root of your workspace folder to build all the packages.
 
 ## Reproduction
 We provide a singular script which runs all the experiments from the paper. Keep in mind that actually running them in succession take as long as 120 hours.

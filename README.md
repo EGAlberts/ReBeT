@@ -21,7 +21,7 @@ Within the docker container you can follow the steps in the Installation section
 
 3. Download release BehaviorTree.CPP-4.1.1 from https://github.com/BehaviorTree/BehaviorTree.CPP/releases/tag/4.1.1 and place it within the src folder.
 
-4. Clone particular commit from BehaviorTree.ROS2: `git clone https://github.com/BehaviorTree/BehaviorTree.ROS2/tree/9ed45e92bee2d694789a4db6703234a1da0b8681` and also place it within the src folder. .
+4. In the root of your workspace folder, use the following command `vcs import src < rebet.rosinstall --recursive` to clone and place the dependencies in the src folder.
 
 5. Install ultralytics:  https://github.com/ultralytics
 

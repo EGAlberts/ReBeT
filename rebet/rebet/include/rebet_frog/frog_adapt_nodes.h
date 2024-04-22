@@ -1,4 +1,4 @@
-#pragma once
+  #pragma once
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -7,8 +7,6 @@
 #include <chrono>
 #include <ctime> 
 #include "rebet/system_attribute_value.hpp"
-#include "rebet_msgs/msg/variable_parameters.hpp"
-#include "rebet_msgs/msg/variable_parameter.hpp"
 #include "rcl_interfaces/msg/parameter_value.hpp"
 #include "lifecycle_msgs/msg/transition.hpp"
 #include "rebet/adapt_node.h"
@@ -24,7 +22,7 @@ class AdaptPictureRateOnline: public AdaptOnConditionOnStart<int>
 {
   public:
 
-    AdaptPictureRateOnline(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnStart<int>(name, config, AdaptationTarget::BlackboardEntry, AdaptationType::Online)
+    AdaptPictureRateOnline(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnStart<int>(name, config, AdaptationTarget::RosParameter, AdaptationType::External)
     {
       _condition_default = true;
       registerAdaptations();
@@ -42,18 +40,76 @@ class AdaptPictureRateOnline: public AdaptOnConditionOnStart<int>
 
       return child_ports;
     }
+};
+
+class FromExploreToIdentify: public AdaptOnConditionOnStart<int>
+{
+  public:
+
+    FromExploreToIdentify(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnStart<int>(name, config, AdaptationTarget::LifecycleTransition, AdaptationType::Internal)
+    {
+      _condition_default = true;
+      registerAdaptations();
+    }
 
 
+    static PortsList providedPorts()
+    {
+      PortsList base_ports = AdaptOnConditionOnStart::providedPorts();
 
+      PortsList child_ports =  { 
+        InputPort<std::vector<std::string>>(ADAP_LOC, "Where the thing you adapt is located") //Overwrite the location to have multiple node names.
+      };
+      child_ports.merge(base_ports);
 
+      return child_ports;
+    }
+
+    
+    virtual bool evaluate_condition() override
+    {
+      std::vector<std::string> node_names;
+      getInput(ADAP_LOC, node_names);
+      lifecycle_msgs::msg::Transition activate_transition;
+      activate_transition.id = 3; //Activate transition
+
+      lifecycle_msgs::msg::Transition shutdown_transition;
+      shutdown_transition.id = 7; //Shutdown transition
+
+      lifecycle_msgs::msg::Transition configure_transition;
+      configure_transition.id = 1; //Configure transition
+
+      aal_msgs::msg::Adaptation adap, adaptwo, adaptthree;
+
+      adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::LifecycleTransition);
+      adaptwo.adaptation_target = static_cast<int8_t>(AdaptationTarget::LifecycleTransition);
+      adaptthree.adaptation_target = static_cast<int8_t>(AdaptationTarget::LifecycleTransition);
+
+      adap.lifecycle_adaptation = activate_transition;
+      adap.node_name = node_names[0];
+
+      adaptwo.lifecycle_adaptation = shutdown_transition;
+      adaptwo.node_name = node_names[1];
+
+      adaptthree.lifecycle_adaptation = configure_transition;
+      adaptthree.node_name = node_names[0];
+
+      _offline_adaptations.push_back(adaptwo);
+      _offline_adaptations.push_back(adaptthree);
+      _offline_adaptations.push_back(adap);
+
+     
+    }
+  private:
 
 };
+
 
 class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
 {
   public:
 
-    AdaptPictureRateOffline(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnStart<int>(name, config, AdaptationTarget::BlackboardEntry, AdaptationType::Offline)
+    AdaptPictureRateOffline(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnStart<int>(name, config, AdaptationTarget::RosParameter, AdaptationType::Internal)
     {
       _condition_default = true;
       registerAdaptations();
@@ -118,13 +174,13 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
       _current_pic_rate = pic_rate;
       getInput(ADAP_SUB, param_name);
 
-      rebet_msgs::msg::Adaptation adap;
+      aal_msgs::msg::Adaptation adap;
       rclcpp::Parameter adap_param = rclcpp::Parameter(param_name,rclcpp::ParameterValue(pic_rate));
 
       std::cout << "type name " << adap_param.get_type_name() << std::endl;
 
-      adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::BlackboardEntry);
-      adap.blackboard_adaptation = adap_param.to_parameter_msg();
+      // adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::BlackboardEntry);
+      // adap.blackboard_adaptation = adap_param.to_parameter_msg();
 
       _offline_adaptations.push_back(adap);
 
@@ -309,77 +365,11 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
 
 };
 
-class AdaptChargeConditionOffline: public AdaptOnConditionOnStart<std::string>
-{
-  public:
-
-    AdaptChargeConditionOffline(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnStart<std::string>(name, config, AdaptationTarget::BlackboardEntry, AdaptationType::Offline)
-    {
-      _condition_default = true;
-      sum_power_metric_observed = 0.0;
-      //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.  
-    }
-
-    static PortsList providedPorts()
-    {
-      PortsList base_ports = AdaptOnConditionOnStart::providedPorts();
-
-      PortsList child_ports =  {
-            InputPort<double>(METRIC_TO_CHECK, "power_qr value")
-              };
-      child_ports.merge(base_ports);
-
-      return child_ports;
-    }
-
-    virtual bool evaluate_condition() override
-    {
-      _offline_adaptations = {};
-      //We assume, that since the QR from which this node receives Input should always output to its port prior to this being ticked, that the state is up to date.
-      double curr_power_metric;
-      auto res = getInput<double>(METRIC_TO_CHECK, curr_power_metric);
-
-      
-
-
-      if(res)
-      {
-        std::cout << "\n\n\n\n\n\n\n\n\n\n checking for charge " << sum_power_metric_observed << "\n\n\n\n\n\n\n\n\n\n checking for charge " << std::endl;
-        sum_power_metric_observed+=1.0; //curr_power_metric; Just going to count a number of times for now. You can see how easily this could use a real power value.
-        if(sum_power_metric_observed > CHARGE_THRESHOLD) //
-        {
-          RCLCPP_INFO(node_->get_logger(), "\n\n\nPower Tresh Exceed!\n\n\n");
-          sum_power_metric_observed = 0.0;
-
-          std::string param_name;
-          getInput(ADAP_SUB, param_name);
-          rebet_msgs::msg::Adaptation adap;
-          rclcpp::Parameter adap_param = rclcpp::Parameter(param_name,rclcpp::ParameterValue("charge"));
-          adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::BlackboardEntry);
-          adap.blackboard_adaptation = adap_param.to_parameter_msg();
-
-          _offline_adaptations.push_back(adap);
-
-    
-          return true;
-        }
-      }
-
-      return false;
-    }
-
-  private:
-    static constexpr const char* METRIC_TO_CHECK = "power_consumed";
-    double sum_power_metric_observed;
-    const double CHARGE_THRESHOLD = 10.0;
-};
-
-
 class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
 {
   public:
 
-    AdaptMaxSpeedOnline(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::Online)
+    AdaptMaxSpeedOnline(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::External)
     {
       //Since we are only interested in modifying the x-axis (backwards/forwards) speed, we wrap the adaptation_options given into the required triple of x y theta speeds.
         std::vector<double> param_values;
@@ -391,7 +381,7 @@ class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
 
         
 
-        rebet_msgs::msg::AdaptationOptions variable_param = rebet_msgs::msg::AdaptationOptions();
+        aal_msgs::msg::AdaptationOptions variable_param = aal_msgs::msg::AdaptationOptions();
 
 
         variable_param.name = param_name;
@@ -563,7 +553,7 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
 {
   public:
 
-    AdaptMaxSpeedOffline(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::Offline)
+    AdaptMaxSpeedOffline(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::Internal)
     {
       //Since we are only interested in modifying the x-axis (backwards/forwards) speed, we wrap the adaptation_options given into the required triple of x y theta speeds.
         std::vector<double> param_values;
@@ -575,7 +565,7 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
 
         
 
-        rebet_msgs::msg::AdaptationOptions variable_param = rebet_msgs::msg::AdaptationOptions();
+        aal_msgs::msg::AdaptationOptions variable_param = aal_msgs::msg::AdaptationOptions();
 
 
         variable_param.name = param_name;
@@ -606,7 +596,7 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
       getInput(ADAP_LOC, node_name);
 
 
-      rebet_msgs::msg::Adaptation adap;
+      aal_msgs::msg::Adaptation adap;
       rclcpp::Parameter adap_param = rclcpp::Parameter(param_name,rclcpp::ParameterValue(speed_vector));
       adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::RosParameter);
       adap.parameter_adaptation = adap_param.to_parameter_msg();

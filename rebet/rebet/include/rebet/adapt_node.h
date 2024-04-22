@@ -5,16 +5,16 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
 
-#include "rebet_msgs/srv/online_adaptation.hpp"
-#include "rebet_msgs/srv/offline_adaptation.hpp"
+#include "aal_msgs/srv/adapt_architecture_external.hpp"
+#include "aal_msgs/srv/adapt_architecture.hpp"
 
 #include "builtin_interfaces/msg/time.hpp"
 #include <algorithm>
 #include <chrono>
 #include <ctime> 
 #include "rebet/system_attribute_value.hpp"
-#include "rebet_msgs/msg/adaptation.hpp"
-#include "rebet_msgs/msg/adaptation_options.hpp"
+#include "aal_msgs/msg/adaptation.hpp"
+#include "aal_msgs/msg/adaptation_options.hpp"
 #include "rcl_interfaces/msg/parameter_value.hpp"
 #include "lifecycle_msgs/msg/transition.hpp"
 namespace BT
@@ -34,37 +34,28 @@ namespace BT
  */
 
 
-
-
-class OfflineAdaptation {
-  public:
-    OfflineAdaptation() {}
-};
-
-
-enum class AdaptationType {Online, Offline};
+enum class AdaptationType {External, Internal};
 
 enum class AdaptationTarget : int8_t {
   LifecycleTransition = 0, 
-  RosParameter,
-  BlackboardEntry};
+  RosParameter};
 
 
 class AdaptDecoratorBase {
 protected:
     AdaptationTarget adaptation_target_;
-    std::vector<rebet_msgs::msg::AdaptationOptions> _var_params = {};
+    std::vector<aal_msgs::msg::AdaptationOptions> _var_params = {};
     std::vector<lifecycle_msgs::msg::Transition> _transitions = {};
     std::shared_ptr<rclcpp::Node> node_;
     AdaptationType adaptation_type_;
     rclcpp::CallbackGroup::SharedPtr callback_group_;
-    std::vector<rebet_msgs::msg::Adaptation> _offline_adaptations;
-    std::shared_future<rebet_msgs::srv::OnlineAdaptation::Response::SharedPtr> online_future_response_;
-    std::shared_future<rebet_msgs::srv::OfflineAdaptation::Response::SharedPtr> offline_future_response_;
-    rebet_msgs::srv::OnlineAdaptation::Response::SharedPtr online_response_;
-    rebet_msgs::srv::OfflineAdaptation::Response::SharedPtr offline_response_;
-    rclcpp::Client<rebet_msgs::srv::OnlineAdaptation>::SharedPtr online_adapt_client_;
-    rclcpp::Client<rebet_msgs::srv::OfflineAdaptation>::SharedPtr offline_adapt_client_;
+    std::vector<aal_msgs::msg::Adaptation> _offline_adaptations;
+    std::shared_future<aal_msgs::srv::AdaptArchitectureExternal::Response::SharedPtr> online_future_response_;
+    std::shared_future<aal_msgs::srv::AdaptArchitecture::Response::SharedPtr> offline_future_response_;
+    aal_msgs::srv::AdaptArchitectureExternal::Response::SharedPtr online_response_;
+    aal_msgs::srv::AdaptArchitecture::Response::SharedPtr offline_response_;
+    rclcpp::Client<aal_msgs::srv::AdaptArchitectureExternal>::SharedPtr online_adapt_client_;
+    rclcpp::Client<aal_msgs::srv::AdaptArchitecture>::SharedPtr offline_adapt_client_;
     std::vector<double> _current_utilities = {};
     bool response_received_ = false;
     std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(ADAP_SERVICE_TIMEOUT_MILLISECOND);
@@ -79,13 +70,10 @@ protected:
     static constexpr const char* ADAP_SUB = "adaptation_subject";
     static constexpr const char* ADAP_LOC = "subject_location";
 
-    double evaluate_adaptation(rebet_msgs::msg::Adaptation given_adaptation)
+    double evaluate_adaptation(aal_msgs::msg::Adaptation given_adaptation)
     {
       switch(given_adaptation.adaptation_target)
       {
-        case static_cast<int8_t>(AdaptationTarget::BlackboardEntry):
-          return utility_of_adaptation(given_adaptation.blackboard_adaptation);
-
         case static_cast<int8_t>(AdaptationTarget::RosParameter):
           return utility_of_adaptation(given_adaptation.parameter_adaptation);
 
@@ -120,7 +108,7 @@ protected:
       client = node_->create_client<AdaptationService>(service_name, rmw_qos_profile_services_default, callback_group_);
       auto request = std::make_shared<AdaptationRequest>();
 
-      if constexpr (std::is_same_v<AdaptationService, rebet_msgs::srv::OnlineAdaptation>)
+      if constexpr (std::is_same_v<AdaptationService, aal_msgs::srv::AdaptArchitectureExternal>)
       {
         request->adaptation_space = _var_params;
         request->task_identifier = registration_name;
@@ -130,7 +118,7 @@ protected:
 
         
       }
-      else if constexpr (std::is_same_v<AdaptationService, rebet_msgs::srv::OfflineAdaptation>)
+      else if constexpr (std::is_same_v<AdaptationService, aal_msgs::srv::AdaptArchitecture>)
       {
         request->adaptations = _offline_adaptations;
         std::cout << "offline adap sent type " << _offline_adaptations[0].parameter_adaptation.value.type << std::endl;
@@ -158,7 +146,7 @@ protected:
         {
           response_received_ = true;
 
-          if constexpr (std::is_same_v<AdaptationService, rebet_msgs::srv::OnlineAdaptation>){
+          if constexpr (std::is_same_v<AdaptationService, aal_msgs::srv::AdaptArchitectureExternal>){
             std::cout << "Response received!" << std::endl;
 
             online_response_ = online_future_response_.get();
@@ -187,7 +175,7 @@ protected:
               throw std::runtime_error("Request was rejected by the service");
             }
           }
-          else if constexpr (std::is_same_v<AdaptationService, rebet_msgs::srv::OfflineAdaptation>){
+          else if constexpr (std::is_same_v<AdaptationService, aal_msgs::srv::AdaptArchitecture>){
             std::cout << "Response received!" << std::endl;
 
             offline_response_ = offline_future_response_.get();
@@ -260,7 +248,7 @@ private:
         getInput(ADAP_SUB, param_name);
         getInput(ADAP_LOC, node_name);
 
-        rebet_msgs::msg::AdaptationOptions variable_param = rebet_msgs::msg::AdaptationOptions();
+        aal_msgs::msg::AdaptationOptions variable_param = aal_msgs::msg::AdaptationOptions();
         // #name of the parameter
         // string name
 
@@ -360,16 +348,16 @@ class AdaptOnConditionOnStart : public AdaptOnCondition<ParamT>, public virtual 
         std::string strategy_name;
         this->getInput(ADAP_STRAT,strategy_name);
 
-        if(adaptation_type_ == AdaptationType::Online)
+        if(adaptation_type_ == AdaptationType::External)
         {
-          sendAdaptationRequest<rebet_msgs::srv::OnlineAdaptation, rebet_msgs::srv::OnlineAdaptation::Request>(
-            "/online_adaptation", strategy_name, online_adapt_client_, this->registrationName());
+          sendAdaptationRequest<aal_msgs::srv::AdaptArchitectureExternal, aal_msgs::srv::AdaptArchitectureExternal::Request>(
+            "/adapt_architecture_external", strategy_name, online_adapt_client_, this->registrationName());
             
         }
-        else if(adaptation_type_ == AdaptationType::Offline)
+        else if(adaptation_type_ == AdaptationType::Internal)
         {
-          sendAdaptationRequest<rebet_msgs::srv::OfflineAdaptation, rebet_msgs::srv::OfflineAdaptation::Request>(
-            "/offline_adaptation", strategy_name, offline_adapt_client_, this->registrationName());
+          sendAdaptationRequest<aal_msgs::srv::AdaptArchitecture, aal_msgs::srv::AdaptArchitecture::Request>(
+            "/adapt_architecture'", strategy_name, offline_adapt_client_, this->registrationName());
         }
         time_request_sent_ = node_->now();
       }
@@ -393,13 +381,13 @@ class AdaptOnConditionOnStart : public AdaptOnCondition<ParamT>, public virtual 
         rclcpp::FutureReturnCode ret;
 
         bool received = false;
-        if(adaptation_type_ == AdaptationType::Online){
+        if(adaptation_type_ == AdaptationType::External){
           ret = callback_group_executor_.spin_until_future_complete(online_future_response_, nodelay);
-          received = receiveAdaptationRequest<rebet_msgs::srv::OnlineAdaptation>(ret);
+          received = receiveAdaptationRequest<aal_msgs::srv::AdaptArchitectureExternal>(ret);
         }
-        else if(adaptation_type_ == AdaptationType::Offline){
+        else if(adaptation_type_ == AdaptationType::Internal){
           ret = callback_group_executor_.spin_until_future_complete(offline_future_response_, nodelay);
-          received = receiveAdaptationRequest<rebet_msgs::srv::OfflineAdaptation>(ret);
+          received = receiveAdaptationRequest<aal_msgs::srv::AdaptArchitecture>(ret);
         }
 
         if(!received){
@@ -480,9 +468,9 @@ class AdaptOnConditionOnStart : public AdaptOnCondition<ParamT>, public virtual 
 
     bool adapted_yet = false;
 
-    // std::shared_future<rebet_msgs::srv::RequestAdaptation::Response::SharedPtr> adapt_result;
+    // std::shared_future<aal_msgs::srv::RequestAdaptation::Response::SharedPtr> adapt_result;
     // rclcpp::detail::FutureAndRequestId<std::future<SharedResponse>>
-    // rclcpp::detail::FutureAndRequestId<std::future<rebet_msgs::srv::RequestAdaptation::Response::SharedPtr>> adapt_result;
+    // rclcpp::detail::FutureAndRequestId<std::future<aal_msgs::srv::RequestAdaptation::Response::SharedPtr>> adapt_result;
     int _detected_in_window;
     builtin_interfaces::msg::Time _last_timestamp;
     double _max_detected;
@@ -546,7 +534,7 @@ class AdaptOnConditionOnRunning : public AdaptOnCondition<ParamT>, public virtua
       std::string strategy_name;
       this->getInput(ADAP_STRAT,strategy_name);
       
-      // auto request = std::make_shared<rebet_msgs::srv::RequestAdaptation::Request>();
+      // auto request = std::make_shared<aal_msgs::srv::RequestAdaptation::Request>();
 
       // future_response_ = {};
       // request->adaptation_options = _var_params;
@@ -558,16 +546,16 @@ class AdaptOnConditionOnRunning : public AdaptOnCondition<ParamT>, public virtua
       
       // future_response_ = adapt_client_->async_send_request(request).share();
 
-        if(adaptation_type_ == AdaptationType::Online)
+        if(adaptation_type_ == AdaptationType::External)
         {
-          sendAdaptationRequest<rebet_msgs::srv::OnlineAdaptation, rebet_msgs::srv::OnlineAdaptation::Request>(
-            "/online_adaptation", strategy_name, online_adapt_client_, this->registrationName());
+          sendAdaptationRequest<aal_msgs::srv::AdaptArchitectureExternal, aal_msgs::srv::AdaptArchitectureExternal::Request>(
+            "/adapt_architecture_external", strategy_name, online_adapt_client_, this->registrationName());
             
         }
-        else if(adaptation_type_ == AdaptationType::Offline)
+        else if(adaptation_type_ == AdaptationType::Internal)
         {
-          sendAdaptationRequest<rebet_msgs::srv::OfflineAdaptation, rebet_msgs::srv::OfflineAdaptation::Request>(
-            "/offline_adaptation", strategy_name, offline_adapt_client_, this->registrationName());
+          sendAdaptationRequest<aal_msgs::srv::AdaptArchitecture, aal_msgs::srv::AdaptArchitecture::Request>(
+            "/adapt_architecture", strategy_name, offline_adapt_client_, this->registrationName());
         }
       time_request_sent_ = node_->now();
       
@@ -588,13 +576,13 @@ class AdaptOnConditionOnRunning : public AdaptOnCondition<ParamT>, public virtua
         rclcpp::FutureReturnCode ret;
 
         bool received = false;
-        if(adaptation_type_ == AdaptationType::Online){
+        if(adaptation_type_ == AdaptationType::External){
           ret = callback_group_executor_.spin_until_future_complete(online_future_response_, nodelay);
-          received = receiveAdaptationRequest<rebet_msgs::srv::OnlineAdaptation>(ret);
+          received = receiveAdaptationRequest<aal_msgs::srv::AdaptArchitectureExternal>(ret);
         }
-        else if(adaptation_type_ == AdaptationType::Offline){
+        else if(adaptation_type_ == AdaptationType::Internal){
           ret = callback_group_executor_.spin_until_future_complete(offline_future_response_, nodelay);
-          received = receiveAdaptationRequest<rebet_msgs::srv::OfflineAdaptation>(ret);
+          received = receiveAdaptationRequest<aal_msgs::srv::AdaptArchitecture>(ret);
         }
 
         if(!received){
@@ -733,16 +721,16 @@ class AdaptOnConditionOnSuccess : public AdaptOnCondition<ParamT>, public virtua
           std::string strategy_name;
           this->getInput(ADAP_STRAT,strategy_name);
 
-        if(adaptation_type_ == AdaptationType::Online)
+        if(adaptation_type_ == AdaptationType::External)
         {
-          sendAdaptationRequest<rebet_msgs::srv::OnlineAdaptation, rebet_msgs::srv::OnlineAdaptation::Request>(
-            "/online_adaptation", strategy_name, online_adapt_client_, this->registrationName());
+          sendAdaptationRequest<aal_msgs::srv::AdaptArchitectureExternal, aal_msgs::srv::AdaptArchitectureExternal::Request>(
+            "/adapt_architecture_external", strategy_name, online_adapt_client_, this->registrationName());
             
         }
-        else if(adaptation_type_ == AdaptationType::Offline)
+        else if(adaptation_type_ == AdaptationType::Internal)
         {
-          sendAdaptationRequest<rebet_msgs::srv::OfflineAdaptation, rebet_msgs::srv::OfflineAdaptation::Request>(
-            "/offline_adaptation", strategy_name, offline_adapt_client_, this->registrationName());
+          sendAdaptationRequest<aal_msgs::srv::AdaptArchitecture, aal_msgs::srv::AdaptArchitecture::Request>(
+            "/adapt_architecture", strategy_name, offline_adapt_client_, this->registrationName());
         }
           time_request_sent_ = node_->now();
           request_sent_ = true;
@@ -761,13 +749,13 @@ class AdaptOnConditionOnSuccess : public AdaptOnCondition<ParamT>, public virtua
             rclcpp::FutureReturnCode ret;
 
             bool received = false;
-            if(adaptation_type_ == AdaptationType::Online){
+            if(adaptation_type_ == AdaptationType::External){
               ret = callback_group_executor_.spin_until_future_complete(online_future_response_, nodelay);
-              received = receiveAdaptationRequest<rebet_msgs::srv::OnlineAdaptation>(ret);
+              received = receiveAdaptationRequest<aal_msgs::srv::AdaptArchitectureExternal>(ret);
             }
-            else if(adaptation_type_ == AdaptationType::Offline){
+            else if(adaptation_type_ == AdaptationType::Internal){
               ret = callback_group_executor_.spin_until_future_complete(offline_future_response_, nodelay);
-              received = receiveAdaptationRequest<rebet_msgs::srv::OfflineAdaptation>(ret);
+              received = receiveAdaptationRequest<aal_msgs::srv::AdaptArchitecture>(ret);
             }
 
             if(!received){
@@ -911,16 +899,16 @@ class AdaptOnConditionOnFailure : public AdaptOnCondition<ParamT>, public virtua
           std::string strategy_name;
           this->getInput(ADAP_STRAT,strategy_name);
 
-          if(adaptation_type_ == AdaptationType::Online)
+          if(adaptation_type_ == AdaptationType::External)
           {
-            sendAdaptationRequest<rebet_msgs::srv::OnlineAdaptation, rebet_msgs::srv::OnlineAdaptation::Request>(
-              "/online_adaptation", strategy_name, online_adapt_client_, this->registrationName());
+            sendAdaptationRequest<aal_msgs::srv::AdaptArchitectureExternal, aal_msgs::srv::AdaptArchitectureExternal::Request>(
+              "/adapt_architecture_external", strategy_name, online_adapt_client_, this->registrationName());
               
           }
-          else if(adaptation_type_ == AdaptationType::Offline)
+          else if(adaptation_type_ == AdaptationType::Internal)
           {
-            sendAdaptationRequest<rebet_msgs::srv::OfflineAdaptation, rebet_msgs::srv::OfflineAdaptation::Request>(
-              "/offline_adaptation", strategy_name, offline_adapt_client_, this->registrationName());
+            sendAdaptationRequest<aal_msgs::srv::AdaptArchitecture, aal_msgs::srv::AdaptArchitecture::Request>(
+              "/adapt_architecture", strategy_name, offline_adapt_client_, this->registrationName());
           }
           time_request_sent_ = node_->now();
           request_sent_ = true;
@@ -940,13 +928,13 @@ class AdaptOnConditionOnFailure : public AdaptOnCondition<ParamT>, public virtua
             rclcpp::FutureReturnCode ret;
 
             bool received = false;
-            if(adaptation_type_ == AdaptationType::Online){
+            if(adaptation_type_ == AdaptationType::External){
               ret = callback_group_executor_.spin_until_future_complete(online_future_response_, nodelay);
-              received = receiveAdaptationRequest<rebet_msgs::srv::OnlineAdaptation>(ret);
+              received = receiveAdaptationRequest<aal_msgs::srv::AdaptArchitectureExternal>(ret);
             }
-            else if(adaptation_type_ == AdaptationType::Offline){
+            else if(adaptation_type_ == AdaptationType::Internal){
               ret = callback_group_executor_.spin_until_future_complete(offline_future_response_, nodelay);
-              received = receiveAdaptationRequest<rebet_msgs::srv::OfflineAdaptation>(ret);
+              received = receiveAdaptationRequest<aal_msgs::srv::AdaptArchitecture>(ret);
             }
 
             if(received){

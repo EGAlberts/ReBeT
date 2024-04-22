@@ -8,6 +8,8 @@
 #include "behaviortree_ros2/bt_action_node.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "std_msgs/msg/string.hpp"
+
 #include "rebet_msgs/action/behavior_tree.hpp"
 
 #include "rebet_msgs/srv/set_blackboard.hpp"
@@ -58,7 +60,6 @@
 
 
 #include "behaviortree_cpp/loggers/groot2_publisher.h"
-
 
 
 
@@ -123,6 +124,8 @@ public:
       std::bind(&Arborist::handle_tree_cancel, this, _1),
       std::bind(&Arborist::handle_tree_accepted, this, _1));
 
+      publisher_ = this->create_publisher<std_msgs::msg::String>("arborist/reporting", 10);
+
       //I suppose here you register all the possible custom nodes, and the determination as to whether they are actually used lies in the xml tree provided.
 
       // registerActionClient<IdentifyObjectAction>(factory, "bt_identifyobject_client", "checkForObjectsActionName", "identifyObject");
@@ -153,7 +156,8 @@ public:
 
       
       factory.registerNodeType<ObjectDetectionEfficiencyQR>("DetectObjectsEfficiently");
-      factory.registerNodeType<PowerQR>("PowerQR");
+      factory.registerNodeType<SimpleSystemPowerQR>("KeepBatteryMin");
+      factory.registerNodeType<SystemPowerQR>("PowerQR");
       factory.registerNodeType<SafetyQR>("SafetyQR");
       factory.registerNodeType<ObjectDetectionPowerQR>("DetectObjectsSavePower");
 
@@ -173,12 +177,14 @@ public:
       factory.registerNodeType<AdaptMaxSpeedOnline>("AdaptMaxSpeed");
       factory.registerNodeType<AdaptMaxSpeedOffline>("AdaptMaxSpeedOff");
 
-      factory.registerNodeType<AdaptChargeConditionOffline>("WhetherToCharge");
+      factory.registerNodeType<FromExploreToIdentify>("FromExploreToIdentify");
+
+
+      // factory.registerNodeType<AdaptChargeConditionOffline>("WhetherToCharge");
       factory.registerNodeType<SetDockLocation>("SetChargingDockLocation");
 
 
-
-      this->declare_parameter(BT_NAME_PARAM, "suave_offline.xml");
+      this->declare_parameter(BT_NAME_PARAM, "frog_aal.xml");
       this->declare_parameter(EXP_NAME_PARAM, "no_experiment_name");
 
       bt_name = this->get_parameter(BT_NAME_PARAM).as_string();
@@ -208,7 +214,7 @@ public:
 
       auto node_visitor = [max_objs_ps, msn_window_length, pow_window_length, max_pics_ps](TreeNode* node)
       {
-        if (auto power_qr_node = dynamic_cast<PowerQR*>(node))
+        if (auto power_qr_node = dynamic_cast<SystemPowerQR*>(node))
         {
           power_qr_node->initialize(max_pics_ps,
                                        pow_window_length);
@@ -304,7 +310,7 @@ private:
   void handle_set_atb_bb(const std::shared_ptr<SetAttributesInBlackboard::Request> request,
         std::shared_ptr<SetAttributesInBlackboard::Response> response)
   {
-    RCLCPP_INFO(this->get_logger(), "Set Attributes Service Called in Arborist Node");
+    // RCLCPP_INFO(this->get_logger(), "Set Attributes Service Called in Arborist Node");
 
     for (auto const & sys_attr : request->sys_attributes)
     {
@@ -312,7 +318,7 @@ private:
       tree.rootBlackboard()->set<rebet::SystemAttributeValue>(sys_attr.name, sys_attvalue_obj);
     }
     response->success = true;
-    RCLCPP_INFO(this->get_logger(), "Set Attributes Service finished in Arborist Node");
+    // RCLCPP_INFO(this->get_logger(), "Set Attributes Service finished in Arborist Node");
 
   }
 
@@ -862,7 +868,9 @@ private:
           RCLCPP_INFO(this->get_logger(), "one second passed");
           time_since_last = current_time;
 
-
+          auto message = std_msgs::msg::String();
+          message.data = "sys_pow_metric: " + std::to_string(getFloatOrNot("sys_power_metric")) + "Move_pow_metric: " + std::to_string(getFloatOrNot("move_pow_metric"));
+          publisher_->publish(message);
           if(bt_name == "suave_offline.xml")
           {
             time_limit = 300;
@@ -1003,7 +1011,7 @@ private:
   rclcpp::Service<SetWeights>::SharedPtr _set_weights;
   rclcpp::Service<SetAttributesInBlackboard>::SharedPtr _set_att_in_blackboard;
   rclcpp::Service<SetParameterInBlackboard>::SharedPtr _set_param_in_blackboard;
-
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr publisher_;
 
 
   rclcpp_action::Server<BTAction>::SharedPtr _start_tree; 

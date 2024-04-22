@@ -17,7 +17,7 @@ def generate_launch_description():
             parameters=[config_file,{}]
         ),
         Node(
-            package='rebet',
+            package='aal',
             executable='adaptation_manager_node.py',
             name='adaptation_manager_node',
             parameters=[config_file,{}]

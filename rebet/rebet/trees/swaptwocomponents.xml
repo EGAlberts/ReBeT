@@ -1,0 +1,13 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="SWAP">
+  	
+
+
+	<Repeat num_cycles="20">
+
+		<AdaptPublisher adaptation_subject="publisherA;publisherB" adaptation_period="10">
+			<DemoSubscriber topic_name="lifecycle_chatter" />
+		</AdaptPublisher>
+	</Repeat>
+  </BehaviorTree>
+</root>

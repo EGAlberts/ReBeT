@@ -18,12 +18,13 @@
   <depend>darknet_ros_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>
-  <depend>suave_msgs</depend>
-  <depend>mavros_msgs</depend>
   <depend>lifecycle_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>slam_toolbox</depend>
   <depend>ultralytics</depend>
+  <depend>aal_msgs</depend>
+
+
   <depend>wavefront_frontier_msgs</depend>
 
  

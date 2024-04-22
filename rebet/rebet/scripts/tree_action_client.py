@@ -5,6 +5,7 @@ from rclpy.node import Node
 
 from rebet_msgs.action import BehaviorTree
 
+got_response = False
 
 class TreeActionClient(Node):
 
@@ -21,6 +22,8 @@ class TreeActionClient(Node):
 
         self._send_goal_future.add_done_callback(self.goal_response_callback)
 
+        return self._send_goal_future
+
     def goal_response_callback(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
@@ -33,9 +36,15 @@ class TreeActionClient(Node):
         self._get_result_future.add_done_callback(self.get_result_callback)
 
     def get_result_callback(self, future):
+        global got_response
+        
         result = future.result().result
-        self.get_logger().info('Result: {0}'.format(result.is_success))
-        rclpy.shutdown()
+        if result.is_success:
+            self.get_logger().info('Result: Done ticking BT, ended on Success')
+        else:
+            self.get_logger().info('Result: Done ticking BT, ended on Failure')
+
+        got_response = True
 
     
     def feedback_callback(self, feedback_msg):
@@ -51,8 +60,9 @@ def main(args=None):
 
     future = action_client.send_goal()
 
-    rclpy.spin(action_client)
-
+    while not got_response:
+        rclpy.spin_once(action_client)
+    print("Future complete supposedly") 
     action_client.destroy_node()
     
     rclpy.shutdown()

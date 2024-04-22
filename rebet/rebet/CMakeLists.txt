@@ -9,6 +9,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(behaviortree_ros2 REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
@@ -23,7 +24,8 @@ find_package(mavros_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 find_package(wavefront_frontier_msgs REQUIRED)
-
+find_package(std_msgs REQUIRED)
+find_package(aal_msgs REQUIRED)
 
 
 
@@ -36,7 +38,9 @@ include_directories(include)
 # Create Cpp executable
 add_executable(arborist src/arborist_node.cpp src/system_attribute_value.cpp)
 
-ament_target_dependencies(arborist rclcpp behaviortree_ros2 behaviortree_cpp rebet_msgs lifecycle_msgs diagnostic_msgs geometry_msgs nav_msgs nav2_msgs sensor_msgs slam_toolbox suave_msgs mavros_msgs wavefront_frontier_msgs)
+
+
+ament_target_dependencies(arborist rclcpp rclcpp_lifecycle behaviortree_ros2 behaviortree_cpp rebet_msgs lifecycle_msgs diagnostic_msgs geometry_msgs nav_msgs nav2_msgs sensor_msgs slam_toolbox suave_msgs mavros_msgs wavefront_frontier_msgs aal_msgs)
 
 # Install Cpp executables
 install(TARGETS

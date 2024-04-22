@@ -50,13 +50,13 @@ class ObjectDetectionEfficiencyQR : public TaskLevelQR
       PortsList base_ports = TaskLevelQR::providedPorts();
 
       PortsList child_ports =  {
-              InputPort<rebet_msgs::msg::ObjectsIdentified>(IN_OBJ,"The objects detected through the robot's camera")};
+              InputPort<std::vector<rebet_msgs::msg::ObjectsIdentified>>(IN_OBJ,"The objects detected through the robot's camera")};
       child_ports.merge(base_ports);
 
       return child_ports;
     }
 
-    virtual void calculate_measure() override
+    virtual void calculate_measure() override //process the buffer/batch
     {
       _counter += 1;
 
@@ -68,25 +68,28 @@ class ObjectDetectionEfficiencyQR : public TaskLevelQR
       setOutput(MEAN_METRIC,_average_metric);
     }
 
-    void process_task_progress()
+    void process_task_progress() //Filling the buffer/batch
     {
-      rebet_msgs::msg::ObjectsIdentified objects_msg;
+      std::vector<rebet_msgs::msg::ObjectsIdentified> objects_msg_vec;
+      setOutput(QR_STATE,not_detected); //default
 
-      getInput(IN_OBJ, objects_msg);
 
-      if(objects_msg.stamp != _last_timestamp)
+      getInput(IN_OBJ, objects_msg_vec);
+
+      if(objects_msg_vec[0].stamp != _last_timestamp)
       {
-          if(objects_msg.object_detected)
+        for (const auto& obj_msg : objects_msg_vec) 
+        {
+          if(obj_msg.object_detected)
           {
             setOutput(QR_STATE,detected);
           }
-          else
-          {
-            setOutput(QR_STATE,not_detected);
-          }
-        num_obj_det_curr_exec+=objects_msg.object_names.size();
-        pictures_taken+=1.0;
-        _last_timestamp = objects_msg.stamp;
+
+          num_obj_det_curr_exec+=obj_msg.object_names.size();
+
+        }
+        pictures_taken+=(double)objects_msg_vec.size();
+        _last_timestamp = objects_msg_vec[0].stamp;
       }
 
     }
@@ -155,14 +158,18 @@ class ObjectDetectionPowerQR : public TaskLevelQR
 
     void process_task_progress()
     {
-      rebet_msgs::msg::ObjectsIdentified objects_msg;
+      std::vector<rebet_msgs::msg::ObjectsIdentified> objects_msg_vec;
 
-      getInput(IN_OBJ, objects_msg);
+      getInput(IN_OBJ, objects_msg_vec);
 
-      if(objects_msg.stamp != _obj_last_timestamp)
+
+      if(objects_msg_vec[0].stamp != _obj_last_timestamp)
       {
-        pictures_taken+=1.0;
-        _obj_last_timestamp = objects_msg.stamp;
+        for (const auto& obj_msg : objects_msg_vec) 
+        {
+          pictures_taken+=(double)objects_msg_vec.size();
+        }
+        _obj_last_timestamp = objects_msg_vec[0].stamp;
       }
 
     }
@@ -207,7 +214,7 @@ class ObjectDetectionPowerQR : public TaskLevelQR
       PortsList base_ports = TaskLevelQR::providedPorts();
 
       PortsList child_ports =  {
-              InputPort<rebet_msgs::msg::ObjectsIdentified>(IN_OBJ,"The objects detected through the robot's camera")};
+              InputPort<std::vector<rebet_msgs::msg::ObjectsIdentified>>(IN_OBJ,"The objects detected through the robot's camera")};
       child_ports.merge(base_ports);
 
       return child_ports;
@@ -234,8 +241,6 @@ class ObjectDetectionPowerQR : public TaskLevelQR
       int _window_length;
       int _window_start;
 
-
-      rebet_msgs::msg::ObjectsIdentified _objects_msg;
       builtin_interfaces::msg::Time _obj_last_timestamp;
 
 
@@ -255,7 +260,7 @@ class MovementPowerQR : public TaskLevelQR
     MovementPowerQR(const std::string& name, const NodeConfig& config) : TaskLevelQR(name, config, QualityAttribute::Power)
     {
       _higher_is_better = false;
-
+      _power_consumed_moving = 0.0;
     }
 
     static PortsList providedPorts()
@@ -275,10 +280,8 @@ class MovementPowerQR : public TaskLevelQR
       return 6.25 * pow(speed, 2) + 9.79 * speed + 3.66;
     }
 
-    virtual void calculate_measure() override
+    void process_movement_progress()
     {
-
-
       auto res = getInput(IN_ODOM,_odom_attribute); 
 
       if(res)
@@ -289,17 +292,57 @@ class MovementPowerQR : public TaskLevelQR
 
         if( (odom_msg.header.stamp.sec-_odom_last_timestamp_sec) >= 1 ) //one second has passed since last odom
         {
-          std::cout << "fresh odom in movement power QR" << std::endl;
-          _metric = calculate_power_motion(linear_speed);
+          _power_consumed_moving+= calculate_power_motion(linear_speed);
+          _odom_last_timestamp_sec = odom_msg.header.stamp.sec; 
+        }
+      }
+
+    }
+
+    virtual void calculate_measure() override
+    {
+          _metric = _power_consumed_moving;
+          _power_consumed_moving = 0.0;
           output_metric();
           metric_mean();
           setOutput(MEAN_METRIC,_average_metric);
           std::cout << "metric in  mov power QR " << _metric << std::endl;
 
-          _odom_last_timestamp_sec = odom_msg.header.stamp.sec; 
+          
+      
+    }
+    virtual NodeStatus tick() override
+    {
+      setStatus(NodeStatus::RUNNING);
+      const NodeStatus child_status = child_node_->executeTick();
+
+      switch (child_status)
+      {
+        case NodeStatus::SUCCESS: {
+          calculate_measure(); //Only after the task below has finished
+          resetChild();
+          return NodeStatus::SUCCESS;
+        }
+
+        case NodeStatus::FAILURE: {
+          resetChild();
+          return NodeStatus::FAILURE;
+        }
+
+        case NodeStatus::RUNNING: {
+          process_movement_progress();
+          return NodeStatus::RUNNING;
+        }
+
+        case NodeStatus::SKIPPED: {
+          return NodeStatus::SKIPPED;
+        }
+        case NodeStatus::IDLE: {
+          throw LogicError("[", name(), "]: A child should not return IDLE");
         }
       }
-      
+      return status();
+
     }
 
     private:
@@ -307,7 +350,7 @@ class MovementPowerQR : public TaskLevelQR
    
       int _odom_last_timestamp_sec;
 
-      
+      float _power_consumed_moving;      
 
       static constexpr const char* IN_ODOM = "in_odom";
 
@@ -316,12 +359,110 @@ class MovementPowerQR : public TaskLevelQR
 
 
 
-
-class PowerQR : public SystemLevelQR
+class SimpleSystemPowerQR : public SystemLevelQR
 {
   public:
 
-    PowerQR(const std::string& name, const NodeConfig& config) : SystemLevelQR(name, config, QualityAttribute::Power)
+    SimpleSystemPowerQR(const std::string& name, const NodeConfig& config) : SystemLevelQR(name, config, QualityAttribute::Power)
+    {
+      _window_start = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
+      _idle_consumption = 0.0;
+      _laser_consumption = 0.0; 
+      _cumulative_consumption = 0.0;
+
+      _higher_is_better = false;
+
+    }
+
+
+    void initialize(float max_pics_ps, int window_length)
+    {
+        _window_length = window_length;
+
+          // _max_idle_consumption = IDLE_POW * (_window_length + 1);
+          // _max_laser_consumption = LASER_POW * (_window_length + 1);
+
+    }
+
+
+    static PortsList providedPorts()
+    {
+      PortsList base_ports = SystemLevelQR::providedPorts();
+
+      PortsList child_ports = { 
+              };
+
+      child_ports.merge(base_ports);
+
+      return child_ports;
+    }
+
+    
+	
+    virtual void calculate_measure() override
+    {
+
+      system_power_consumption();
+
+      _metric = _laser_consumption + _idle_consumption;
+
+      _cumulative_consumption+= _metric;
+
+      output_metric();
+
+      metric_mean();
+
+      setOutput(MEAN_METRIC,_average_metric);
+
+      if(_cumulative_consumption > MIN_CHARGE_THRESHOLD)
+      {
+        _cumulative_consumption = 0.0;
+        setOutput(QR_STATE,"below_min"); //it is set back to OK in the BT elsewhere upon completing charging.
+      }
+
+      _laser_consumption = 0.0;
+      _idle_consumption = 0.0;
+
+    }
+
+    void system_power_consumption()
+    {
+      auto curr_time_pointer = std::chrono::system_clock::now();
+
+      int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
+      int elapsed_seconds = current_time-_window_start;
+
+
+      if(elapsed_seconds >= 1)
+      {
+        _laser_consumption+= LASER_POW_PS;
+        _idle_consumption+= IDLE_POW_PS;
+
+        _window_start = current_time;
+      }
+
+    }
+  
+  private:
+      float _cumulative_consumption;
+      float _idle_consumption;
+      float _laser_consumption;
+      int _window_length;
+      int _window_start;
+      
+      const double MIN_CHARGE_THRESHOLD = 100.0;
+      const float IDLE_POW_PS = 1.14; //as caused by the rebet software running. Idle consumption of the robot as a whole is considered a constant factor.
+      const float LASER_POW_PS = 2.34; //watts
+
+};
+
+
+class SystemPowerQR : public SystemLevelQR
+{
+  public:
+
+    SystemPowerQR(const std::string& name, const NodeConfig& config) : SystemLevelQR(name, config, QualityAttribute::Power)
     {
       _window_start = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
@@ -377,6 +518,12 @@ class PowerQR : public SystemLevelQR
       metric_mean();
 
       setOutput(MEAN_METRIC,_average_metric);
+      
+      if(_metric > MIN_CHARGE_THRESHOLD)
+      {
+        setOutput(QR_STATE,"below_min"); //it is set back to OK in the BT elsewhere upon completing charging.
+      }
+
 
       _laser_consumption = 0.0;
       _idle_consumption = 0.0;
@@ -442,7 +589,7 @@ class PowerQR : public SystemLevelQR
       float _laser_consumption;
       int _window_length;
       int _window_start;
-
+      const double MIN_CHARGE_THRESHOLD = 100.0;
       const float IDLE_POW_PS = 1.14; //as caused by the rebet software running. Idle consumption of the robot as a whole is considered a constant factor.
       const float LASER_POW_PS = 2.34; //watts
 

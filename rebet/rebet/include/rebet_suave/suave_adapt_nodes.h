@@ -7,8 +7,6 @@
 #include <chrono>
 #include <ctime> 
 #include "rebet/system_attribute_value.hpp"
-#include "rebet_msgs/msg/variable_parameters.hpp"
-#include "rebet_msgs/msg/variable_parameter.hpp"
 #include "rcl_interfaces/msg/parameter_value.hpp"
 #include "lifecycle_msgs/msg/transition.hpp"
 #include "rebet/adapt_node.h"
@@ -23,7 +21,7 @@ class AdaptSpiralAltitudeOnline : public AdaptPeriodicallyOnRunning<double>
 {
   public:
 
-    AdaptSpiralAltitudeOnline(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::Online)
+    AdaptSpiralAltitudeOnline(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::External)
     {
       registerAdaptations();
       //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.
@@ -52,7 +50,7 @@ class AdaptSpiralAltitudeOffline : public AdaptPeriodicallyOnRunning<double>
 {
   public:
 
-    AdaptSpiralAltitudeOffline(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::Offline)
+    AdaptSpiralAltitudeOffline(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::Internal)
     {
 
     }
@@ -89,7 +87,7 @@ class AdaptSpiralAltitudeOffline : public AdaptPeriodicallyOnRunning<double>
       getInput(ADAP_SUB, param_name);
       getInput(ADAP_LOC, node_name);
 
-      rebet_msgs::msg::Adaptation adap;
+      aal_msgs::msg::Adaptation adap;
       rclcpp::Parameter adap_param = rclcpp::Parameter(param_name,rclcpp::ParameterValue(_current_altitude));
       adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::RosParameter);
       adap.parameter_adaptation = adap_param.to_parameter_msg();
@@ -158,7 +156,7 @@ class AdaptThrusterOffline : public AdaptOnConditionOnRunning<double>
 {
 
   public:
-    AdaptThrusterOffline(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnRunning<double>(name, config, AdaptationTarget::LifecycleTransition, AdaptationType::Offline)
+    AdaptThrusterOffline(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnRunning<double>(name, config, AdaptationTarget::LifecycleTransition, AdaptationType::Internal)
     {
     }
 
@@ -191,7 +189,7 @@ class AdaptThrusterOffline : public AdaptOnConditionOnRunning<double>
           lifecycle_msgs::msg::Transition transition;
           transition.id = 3; //Activate transition
 
-          rebet_msgs::msg::Adaptation adap;
+          aal_msgs::msg::Adaptation adap;
 
           adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::LifecycleTransition);
           adap.lifecycle_adaptation = transition;
@@ -207,7 +205,7 @@ class AdaptThrusterOffline : public AdaptOnConditionOnRunning<double>
           lifecycle_msgs::msg::Transition transition;
           transition.id = 4; //Deactivate transition
 
-          rebet_msgs::msg::Adaptation adap;
+          aal_msgs::msg::Adaptation adap;
 
           adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::LifecycleTransition);
           adap.lifecycle_adaptation = transition;

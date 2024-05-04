@@ -68,6 +68,8 @@ class FromExploreToIdentify: public AdaptOnConditionOnStart<int>
     
     virtual bool evaluate_condition() override
     {
+      _offline_adaptations = {};
+      
       std::vector<std::string> node_names;
       getInput(ADAP_LOC, node_names);
       lifecycle_msgs::msg::Transition activate_transition;
@@ -98,7 +100,8 @@ class FromExploreToIdentify: public AdaptOnConditionOnStart<int>
       _offline_adaptations.push_back(adaptthree);
       _offline_adaptations.push_back(adap);
 
-     
+      return true;
+
     }
   private:
 
@@ -115,6 +118,9 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
       registerAdaptations();
       _pictures_taken = 0;
       _power_consumed = 0.0;
+      current_image_feed = OG_CAMERA_TOPIC;
+
+
 
       
       
@@ -151,13 +157,13 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
       PortsList base_ports = AdaptOnConditionOnStart::providedPorts();
 
       PortsList child_ports =  {
+        InputPort<std::vector<std::string>>(ADAP_SUB, "The name of the thing you adapt"), //overwrite to have multiple.
         InputPort<double>(POW_IN,"the power metric"),
-        InputPort<double>(PICTASK_IN,"the det obj task metric"),
-        InputPort<std::string>(TASK_STATE,"state of the det obj task metric"),
+        OutputPort<int>(OUT_PIC,"chosen pic_rate"),
+        OutputPort<std::string>(OUT_CAM,"current camera topic"),
+        InputPort<std::vector<double>>(PICTASK_IN,"the det obj task metric"),
         InputPort<int>(TOT_OBS, "how many obstacles there are"),
-        OutputPort<int>(OUT_PIC, "elastic picture rate"),
-        OutputPort<int>(ROT, "cycles of visiting obstacles"),
-
+        InputPort<rebet::SystemAttributeValue>(IN_LIGHT,"lighting message wrapped in a systemattributevalue instance"),
               };
       child_ports.merge(base_ports);
 
@@ -166,175 +172,168 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
 
     void pic_adaptation_msg(int pic_rate)
     {
+      std::vector<std::string> param_names;
+      std::string node_name;
 
-      std::cout << "pic rate being put into adaptation msg " << pic_rate << std::endl; 
-      setOutput(OUT_PIC, pic_rate);
-      std::string param_name;
 
       _current_pic_rate = pic_rate;
-      getInput(ADAP_SUB, param_name);
+      getInput(ADAP_SUB, param_names);
+      getInput(ADAP_LOC, node_name);
+
+      std::string param_name = param_names[IND_PARAM_NUM];
+      
+
 
       aal_msgs::msg::Adaptation adap;
       rclcpp::Parameter adap_param = rclcpp::Parameter(param_name,rclcpp::ParameterValue(pic_rate));
 
       std::cout << "type name " << adap_param.get_type_name() << std::endl;
 
-      // adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::BlackboardEntry);
-      // adap.blackboard_adaptation = adap_param.to_parameter_msg();
+      adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::RosParameter);
+      adap.parameter_adaptation = adap_param.to_parameter_msg();
+      adap.node_name = node_name;
 
       _offline_adaptations.push_back(adap);
 
     }
 
-    bool decrease_pic_rate()
+    bool change_camera_feed(std::string new_topic_name)
     {
-      _offline_adaptations = {};
+      if(current_image_feed == new_topic_name){ return false; }
+      std::vector<std::string> param_names;
+      std::string node_name;
 
-      int new_pic_rate = _current_pic_rate - PIC_INCREMENT;
+      getInput(ADAP_SUB, param_names);
+      getInput(ADAP_LOC, node_name);
 
-      if(new_pic_rate < MIN_PIC_INCREMENT)
-      {
-        std::cout << " pic rate decrease not possible " << std::endl;
+      std::string param_name = param_names[IND_PARAM_TOPIC];
+      
+      aal_msgs::msg::Adaptation adap;
+      
+      rclcpp::Parameter adap_param = rclcpp::Parameter(param_name,rclcpp::ParameterValue(new_topic_name));
 
-        return false;
-      }
+      std::cout << "type name " << adap_param.get_type_name() << std::endl;
 
-      pic_adaptation_msg(new_pic_rate);
+      adap.adaptation_target = static_cast<int8_t>(AdaptationTarget::RosParameter);
+      adap.parameter_adaptation = adap_param.to_parameter_msg();
+      adap.node_name = node_name;
+
+      _offline_adaptations.push_back(adap);
+
+      current_image_feed = new_topic_name;
 
       return true;
+
     }
 
-    void increase_pic_rate()
+
+    bool increased_pic_rate()
     {
       _offline_adaptations = {};
 
-      int new_pic_rate = _current_pic_rate + PIC_INCREMENT;
+      if(_current_pic_rate != _max_pic_rate)
+      {
+        int new_pic_rate = _current_pic_rate + PIC_INCREMENT;
+        return set_pic_rate(new_pic_rate);
+      } 
 
+      return false;
       
-
-      pic_adaptation_msg(new_pic_rate);
-
     }
 
-    void set_pic_rate(int new_pic_rate)
+    bool set_pic_rate(int new_pic_rate)
     {
       _offline_adaptations = {};
+      if(new_pic_rate != _current_pic_rate)
+      {
+        pic_adaptation_msg(new_pic_rate);
+        return true;
+      }
 
-      pic_adaptation_msg(new_pic_rate);
+      return false;
 
     }
 
     virtual bool evaluate_condition() override
     {
-      //By virtue of being called, it means a picture has been taken
-      _pictures_taken+=1;
+      setOutput(OUT_PIC, _current_pic_rate);
+      setOutput(OUT_CAM, current_image_feed);
 
-      double current_power;
-      getInput(POW_IN, current_power);
+      double remaining_power_budget, num_objects_detected, objects_visited;
+     
+      auto pow_budget_res = getInput(POW_IN, remaining_power_budget);
+      auto curr_light_res = getInput(IN_LIGHT,_light_attribute);
 
-      //The power consumed for said picture.
-      _power_consumed += current_power;
-
-      //Was an object detected in that picture?
-      std::string state_of_task;
-      getInput(TASK_STATE,state_of_task);
-
-      std::cout << "\n\n\n state of task" << state_of_task << "\n\n" << std::endl;
-      objs_detected.push(state_of_task);
-
-      std::cout << "obs taken pics of " << _obs_taken_pictures_of << std::endl;
+      float current_darkness = _light_attribute.get<rebet::SystemAttributeType::ATTRIBUTE_FLOAT>().data;
+      std::vector<double> task_metrics;
+      
+      auto task_res = getInput(PICTASK_IN, task_metrics);
 
 
 
-      if((_pictures_taken-1) % PIC_INCREMENT == 0 && _pictures_taken != 1) //Was that picture the nth picture?
+      int obs_num;
+      getInput(TOT_OBS, obs_num);
+
+      if(curr_light_res)
       {
-        std::cout << "\n\n\n it was the nth picture \n\n\n" << std::endl;
-        //Whether or not to take another PIC_INCREMENT pics.
-        auto it = std::find(objs_detected.getContainer().begin(), objs_detected.getContainer().end(), detected);
-
-        int obs_num;
-        getInput(TOT_OBS, obs_num);
-        //If there was an object in any of the PIC_INCREMENT number of pictures taken
-        if (it != objs_detected.getContainer().end())
-        {
-
-          std::cout << "\n\n An object was detected \n\n" << std::endl;
-
-          //Potentially take some more pictures.
-
-
-          //As long as it remains possible to take 6 more pictures of the remaining obstacles before exceeding the budget.
-
-
-          std::cout << " obs num " << obs_num << std::endl;
-          int obs_remaining = obs_num - _obs_taken_pictures_of;
-
-          double power_needed_after = (double)obs_remaining * (double)(2 * (PIC_INCREMENT+1)) * DETECTION_AVG_POW; //Power still necessary
-
-          double total_power_budget = (double)obs_num * (double)(2 * (PIC_INCREMENT+1)) * DETECTION_AVG_POW;
-
-          double power_needed_for_extra = PIC_INCREMENT * DETECTION_AVG_POW;
-
-          //Is there at least the power, 
-          double power_left = total_power_budget - _power_consumed;
-          //to take PIC_INCREMENT extra pictures while also taking PIC_INCREMENT + 1 pics of the rest?
-
-          std::cout << "\n\n  pow left " << power_left << " power_needed_after " << power_needed_after <<  " power_needed for extra " << power_needed_for_extra  << std::endl;
-
-          if(power_left >= (power_needed_after + power_needed_for_extra) && power_left > 0.0) 
-          {
-            std::cout << "increase pic rate" << std::endl;
-            increase_pic_rate();
-            return true;
-            //Its OK to take more pictures
-
-          }
-          else
-          {
-            std::cout << "no increase pic rate" << std::endl;
-
-            _pictures_taken = 0;
-            _obs_taken_pictures_of+=1;
-
-            if(_obs_taken_pictures_of == obs_num)
-            {
-              resetTracking();
-            }
-
-            return false;
-            //I'm done with this obstacle
-
-          }
-
-
-        }
-        else
-        {
-
-          //No more pictures.
-          std::cout << "stop pic rate" << std::endl;
-
-
-          //This sets the rate back if it comes after an extended session.
-          set_pic_rate(_pictures_taken); //Till here and no further.
-
-          _pictures_taken = 0;
-          _obs_taken_pictures_of+=1;
-
-          if(_obs_taken_pictures_of == obs_num)
-          {
-            resetTracking();
-          }
-
-
-          return true;
-        }
-            
+        std::cout << "\n\n\nin eval condition darkness\n\n\n" << current_darkness << std::endl;
       }
       else
       {
-        // _obs_taken_pictures_of+=1;
-        return false;
+        std::cout << "\n\n\nin eval condition no lightingg\n\n\n" << std::endl;
+      }
+
+      if(pow_budget_res)
+      {
+        std::cout << "\n\n\nin eval condition remaining pow\n\n\n" << remaining_power_budget << std::endl;
+      }
+
+      if(task_res)
+      {
+        num_objects_detected = task_metrics[0];
+        objects_visited = task_metrics[1]; //this is now pictures taken..
+
+        std::cout << "\n\n\nobjects detected \n\n\n" << num_objects_detected << std::endl;
+        std::cout << "\n\n\nobjects visited \n\n\n" << objects_visited << std::endl;
+
+      }
+
+      if(task_res && pow_budget_res && curr_light_res)
+      {
+        if(remaining_power_budget < 0.0)
+        {
+          return change_camera_feed(ALT_CAMERA_TOPIC);
+        }
+        if((current_darkness) > 0.70)
+        {
+          std::cout << "got this far darkness" << std::endl;
+
+            double total_pics_quota = (double)obs_num * 5; //5 is the repeat in the BT specified.
+
+            double pics_left = total_pics_quota - objects_visited; //quota minus conusmed.
+            double extra_power_consumed = PIC_INCREMENT * DETECTION_AVG_POW;
+
+            double power_needed_after = (double)pics_left * DETECTION_AVG_POW; //Power still necessary to take 5 picture of each obj
+
+            double power_to_be_used = power_needed_after + extra_power_consumed;
+
+            std::cout << "power to be used " << power_to_be_used << std::endl;
+            if(remaining_power_budget >= power_to_be_used && remaining_power_budget > 0.0) 
+            {
+              //While there's still budget we prefer getting the more useful detection from the robot
+              return increased_pic_rate() || change_camera_feed(OG_CAMERA_TOPIC); //The latter is just in case the ext. camera is in use right now
+            }
+            else
+            {
+              //if there's no budget and its noisy, we use the alternative camera.
+              return change_camera_feed(ALT_CAMERA_TOPIC);
+            }
+          
+        }
+        else { 
+          //If it isn't noisy, we conservatively use the robot's camera.
+          return (set_pic_rate(START_PIC_RATE) || change_camera_feed(OG_CAMERA_TOPIC));
+          }
       }
 
       return false;
@@ -342,18 +341,24 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
   private:
       static constexpr const char* POW_IN = "in_power";
       static constexpr const char* PICTASK_IN = "in_pictask";
-      static constexpr const char* TASK_STATE = "in_pictask_state";
+
       static constexpr const char* TOT_OBS = "obstacles_total";
       static constexpr const char* OUT_PIC = "out_pic_rate";
+      static constexpr const char* OUT_CAM = "out_cam_top";
       static constexpr const char* ROT = "rotations_done";
+      static constexpr const char* IN_LIGHT = "lighting_in";
 
+      std::string ALT_CAMERA_TOPIC = "/corner_camera/image_raw";
+      std::string OG_CAMERA_TOPIC = "/camera/image_noisy";
 
+      rebet::SystemAttributeValue _light_attribute;
       std::string detected = std::string(OBJECT_DETECTED_STRING);
+      std::string current_image_feed;
+      int _current_pic_rate = START_PIC_RATE;
+      const int IND_PARAM_TOPIC = 1;
+      const int IND_PARAM_NUM = 0;
 
-      static constexpr int PIC_INCREMENT = 2;
-      const int MIN_PIC_INCREMENT = 1;
-      const int MAX_PIC_INCREMENT = 7;
-      int _current_pic_rate = 5;
+      int _max_pic_rate = START_PIC_RATE + PIC_INCREMENT;
       int rotations_done = 0;
       int _pictures_taken;
       double _power_consumed;
@@ -408,6 +413,9 @@ class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
         InputPort<double>(POW_IN,"the power metric"),
         InputPort<double>(SAFE_IN,"the safety metric"),
         InputPort<double>(MOVE_IN,"the movement efficiency"),
+        OutputPort<double>(SPD_OUT,"the current chosen max speed"),
+        
+
 
               };
       child_ports.merge(base_ports);
@@ -435,7 +443,11 @@ class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
 
       std::vector<double> chosen_speeds = parameter_object.get<std::vector<double>>();
 
+
+
       double chosen_max_speed = chosen_speeds[0];
+
+      setOutput(SPD_OUT, chosen_max_speed);
     
       double current_safety;
       double current_power;
@@ -545,6 +557,8 @@ class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
     static constexpr const char* POW_IN = "in_power";
     static constexpr const char* SAFE_IN = "in_safety";
     static constexpr const char* MOVE_IN = "in_movement";
+    static constexpr const char* SPD_OUT = "report_speed";
+
 
 };
 
@@ -565,19 +579,19 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
 
         
 
-        aal_msgs::msg::AdaptationOptions variable_param = aal_msgs::msg::AdaptationOptions();
+        // aal_msgs::msg::AdaptationOptions variable_param = aal_msgs::msg::AdaptationOptions();
 
 
-        variable_param.name = param_name;
-        variable_param.node_name = node_name;
-        variable_param.adaptation_target_type = static_cast<int8_t>(adaptation_target_);
+        // variable_param.name = param_name;
+        // variable_param.node_name = node_name;
+        // variable_param.adaptation_target_type = static_cast<int8_t>(adaptation_target_);
 
-        for (double val : param_values) {
-            std::vector<double> speed_vector = {val,_default_y_velocity,_default_theta_velocity};
-            rclcpp::ParameterValue par_val = rclcpp::ParameterValue(speed_vector); //Here we wrap it with default values
-            variable_param.possible_values.push_back(par_val.to_value_msg());
-        }
-        _var_params.push_back(variable_param); //vector of VariableParameter   
+        // for (double val : param_values) {
+        //     std::vector<double> speed_vector = {val,_default_y_velocity,_default_theta_velocity};
+        //     rclcpp::ParameterValue par_val = rclcpp::ParameterValue(speed_vector); //Here we wrap it with default values
+        //     variable_param.possible_values.push_back(par_val.to_value_msg());
+        // }
+        // _var_params.push_back(variable_param); //vector of VariableParameter   
 
       //If you overwrite tick, and do this at different moments you can change the adaptation options at runtime.  
     }
@@ -612,9 +626,11 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
 
       double new_max_speed = _current_max_speed - SPEED_INCREMENT;
 
-      if(new_max_speed < MIN_SPEED)
+      if((new_max_speed + EPSILON) < MIN_SPEED)
       {
-        std::cout << "no decrease speed possible " << std::endl;
+        std::cout << std::setprecision(20) << "New max speed: " << new_max_speed << std::endl;
+        std::cout << std::setprecision(20) << "MIN_SPEED: " << MIN_SPEED << std::endl;
+        std::cout << "no decrease speed possible to go from _ to _" << _current_max_speed << " " << new_max_speed << std::endl;
 
         return false;
       }
@@ -642,6 +658,7 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
 
     virtual bool evaluate_condition() override
     {
+      setOutput(SPD_OUT, _current_max_speed);
       if(AdaptPeriodicallyOnRunning::evaluate_condition())
       {
         double current_safety;
@@ -651,6 +668,7 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
         auto pow_res = getInput(POW_IN, current_power);
         auto move_res = getInput(MOVE_IN, current_move);
 
+        
 
 
 
@@ -660,15 +678,15 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
         {
           std::cout << "now here curr_safe " << current_safety << " curr_pow " << current_power << std::endl;
 
-          if( (current_safety < 0.09) || (current_power > 5.0) )
+          if( (current_safety < MIN_LIDAR_RANGE) || (current_power > HIGH_MOVE_POW_CONSUMPTION) )
           {
-            std::cout << "decrease speed here " << std::endl;
+            std::cout << "decreasing max speed " << std::endl;
             
             return decrease_speed();
           }
-          if(current_power < 4.0 || current_safety > 0.15 || current_move < 0.40)
+          if(current_power < (HIGH_MOVE_POW_CONSUMPTION - 1.0) || current_safety > (MIN_LIDAR_RANGE + 0.05) || current_move < DESIRABLE_SPEED)
           {
-            std::cout << "increase speed here " << std::endl;
+            std::cout << "increasing speed here " << std::endl;
 
             return increase_speed();
           }
@@ -685,6 +703,8 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
         InputPort<double>(POW_IN,"the power metric"),
         InputPort<double>(SAFE_IN,"the safety metric"),
         InputPort<double>(MOVE_IN,"the movement efficiency"),
+        OutputPort<double>(SPD_OUT,"the current chosen max speed"),
+        
               };
       child_ports.merge(base_ports);
 
@@ -697,9 +717,15 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
     static constexpr const char* POW_IN = "in_power";
     static constexpr const char* SAFE_IN = "in_safety";
     static constexpr const char* MOVE_IN = "in_movement";
+    static constexpr const char* SPD_OUT = "report_speed";
+
     const double SPEED_INCREMENT = 0.08;
     const double MIN_SPEED = 0.10;
     const double MAX_MAX_SPEED = 0.26;
+    const double MIN_LIDAR_RANGE = 0.10;
+    const double DESIRABLE_SPEED = 0.40;
+    const double HIGH_MOVE_POW_CONSUMPTION = 40.0;
+    const double EPSILON = 0.01; //Floating-point tolerance..
     double _current_max_speed = MAX_MAX_SPEED;
 };
 

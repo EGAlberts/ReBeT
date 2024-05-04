@@ -60,8 +60,8 @@ public:
     }
 
 private:
-    const double DOCK_X = -2.0;
-    const double DOCK_Y = 2.0;
+    const double DOCK_X = 0.0;
+    const double DOCK_Y = 0.0;
 
     
 

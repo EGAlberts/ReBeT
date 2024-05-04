@@ -33,6 +33,7 @@ std::vector<double> quaternion_from_euler(double ai, double aj, double ak)
 
 
 inline constexpr int ADAP_SERVICE_TIMEOUT_MILLISECOND = 2000;
+inline constexpr int YOLO_SERVICE_TIMEOUT_MILLISECOND = 20000;
 
 //https://stackoverflow.com/questions/56334492/c-create-fixed-size-queue
 template <typename T, int MaxLen, typename Container=std::deque<T>>

@@ -8,32 +8,43 @@
 #include "behaviortree_ros2/bt_action_node.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/point.hpp"
+
 #include "nav2_msgs/action/navigate_to_pose.hpp"
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 using namespace BT;
 
 
 using NavigateToPose = nav2_msgs::action::NavigateToPose;
+
+using Point = geometry_msgs::msg::Point;
 using PoseStamped = geometry_msgs::msg::PoseStamped;
+using Quaternion = geometry_msgs::msg::Quaternion;
+using Odometry = nav_msgs::msg::Odometry;
 
 
 
 
 
 
-class GoToPoseAction: public RosActionNode<NavigateToPose>
+
+
+
+class VisitObstacleAction: public RosActionNode<NavigateToPose>
 {
 public:  
 
   //Name for the pose input port
   static constexpr const char* POSES = "poses";
+  static constexpr const char* POSE_IN = "in_pose";
 
-  GoToPoseAction(const std::string& name,
+  VisitObstacleAction(const std::string& name,
                   const NodeConfig& conf,
                   const RosNodeParams& params)
     : RosActionNode<NavigateToPose>(name, conf, params)
   {
-    std::cout << "Someone made me (an GoToPose Action Nodee)" << std::endl;
+    std::cout << "Someone made me (an VisitObstacle Action Nodee)" << std::endl;
     RCLCPP_INFO(node_->get_logger(), "name of the node");
     RCLCPP_INFO(node_->get_logger(), node_->get_name());
 
@@ -47,7 +58,8 @@ public:
     PortsList base_ports = RosActionNode::providedPorts();
 
     PortsList child_ports = { 
-              InputPort<std::vector<PoseStamped>>(POSES),
+              InputPort<std::vector<Point>>(POSES),
+              InputPort<Odometry>(POSE_IN),
               OutputPort<float>("out_time_elapsed"),
               OutputPort<std::string>("name_of_task"),
 
@@ -60,6 +72,36 @@ public:
 
   // This is called when the TreeNode is ticked and it should
   // send the request to the action server
+
+  Quaternion quaternion_from_euler_again(double ai, double aj, double ak) 
+    {
+        ai /= 2.0;
+        aj /= 2.0;
+        ak /= 2.0;
+        double ci = cos(ai);
+        double si = sin(ai);
+        double cj = cos(aj);
+        double sj = sin(aj);
+        double ck = cos(ak);
+        double sk = sin(ak);
+        double cc = ci*ck;
+        double cs = ci*sk;
+        double sc = si*ck;
+        double ss = si*sk;
+
+        double w = cj*sc - sj*cs;
+        double x = cj*ss + sj*cc;
+        double y = cj*cs - sj*sc;
+        double z = cj*cc + sj*ss;
+
+        Quaternion return_qua;
+        return_qua.w = w;
+        return_qua.x = x;
+        return_qua.y = y;
+        return_qua.z = z;
+    
+        return return_qua;
+    }
   bool setGoal(RosActionNode::Goal& goal) override 
   {
     setOutput("name_of_task",registrationName());
@@ -68,19 +110,73 @@ public:
     // string behavior_tree
     std::stringstream ss;
 
-    ss << "setGoal in pose";
-  
+    ss << "setGoal in pose ";
+
+
 
     goal.behavior_tree = "";
-    
+    Odometry odom_obj;
+
     getInput(POSES,poses_to_go_to_);
+    getInput(POSE_IN,odom_obj);
+
+    for (auto positi : poses_to_go_to_) {
+      ss << "(";
+      ss << positi.x;
+      ss << ",";
+      ss << positi.y;
+      ss << ") ";
+    }
+
+    ss << "num_exec:" << num_executions << " ";
+   
+
+    double current_x = odom_obj.pose.pose.position.x;
+    double current_y = odom_obj.pose.pose.position.y;
+
+    double target_x = poses_to_go_to_[num_executions].x;
+    double target_y = poses_to_go_to_[num_executions].y;
+
+    double delta_y = target_y - current_y;
+    double delta_x = target_x - current_x;
+    
+    tf2::Quaternion q_orig, q_rot, q_new;
+
+    tf2::fromMsg(odom_obj.pose.pose.orientation, q_orig);
+    // Rotate the previous pose by 180* about X
+    q_rot.setRPY(0.0, 0.0, atan2(delta_y,delta_x));
+    q_new = q_rot * q_orig;
+    q_new.normalize();    
+
+    goal.pose.header.frame_id = "map";
+
+    // goal.pose.pose = odom_obj.pose.pose;
+
+
+    // double magnitude = sqrt(delta_x * delta_x + delta_y * delta_y);
+    // double unit_x = delta_x / magnitude;
+    // double unit_y = delta_y / magnitude;
+
+    // double offset_distance = 0.1; // 0.1 meters away from the target
+    double goal_x = target_x;
+    double goal_y = target_y;
+
+
+
+    // double angle_to_target = atan2(target_y - goal_y, target_x - goal_x);
+    // ss << angle_to_target;
+
+    goal.pose.pose.orientation = tf2::toMsg(q_new);
+    goal.pose.pose.position.x = goal_x;
+    goal.pose.pose.position.y = goal_y;
+
+
+    goal.pose.header.stamp = node_->now();
+
 
 
     RCLCPP_INFO(node_->get_logger(), ss.str().c_str());
     
-
-    goal.pose = poses_to_go_to_[num_executions];
-    goal.pose.header.stamp = node_->now();
 
 
     // return true, if we were able to set the goal correctly.
@@ -159,5 +255,6 @@ public:
   }
 private:
   int num_executions = 0;
-  std::vector<PoseStamped> poses_to_go_to_;
+  std::vector<Point> poses_to_go_to_;
+  
 };

@@ -12,8 +12,8 @@
 		</RetryUntilSuccessful>
 		<initialPose topic_name="initialpose" in_pose="{current_pose}" />
 		
-		<RetryUntilSuccessful num_attempts="-1">
-			<PowerQR weight="{sys_power_weight}" metric="{sys_power_metric}" mean_metric="{sys_power_mean_metric}" out_state="{power_status}">
+		<RetryUntilSuccessful num_attempts="50">
+			
 				<Switch2 variable="{power_status}" case_1="below_min" case_2="OK">
 					<Sequence>
 						<SetChargingDockLocation dock_position="{charge_poses}"/>
@@ -25,6 +25,7 @@
 						<Sleep msec="1000"/>
 					</Sequence>
 					<Inverter>
+						<PowerQR weight="{sys_power_weight}" metric="{sys_power_metric}" mean_metric="{sys_power_mean_metric}" out_state="{power_status}">
 						<Sequence>
 							<RetryUntilSuccessful num_attempts="-1">
 								<getMap service_name="/slam_toolbox/dynamic_map" map_retrieved="{current_map}"/>
@@ -42,10 +43,11 @@
 								</ForceSuccess>
 							</MovementPowerQR> 
 						</Sequence>
+						</PowerQR>
 					</Inverter>
 					<SetBlackboard value="OK" output_key="power_status"/>
 				</Switch2>
-			</PowerQR>
+			
 		</RetryUntilSuccessful>
 
 		

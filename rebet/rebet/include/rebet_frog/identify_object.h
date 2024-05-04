@@ -44,7 +44,7 @@ public:
     PortsList base_ports = RosServiceNode::providedPorts();
 
     PortsList child_ports = { 
-              OutputPort<ObjectsIdentified>(OBJ_OUT),
+              OutputPort<std::vector<ObjectsIdentified>>(OBJ_OUT),
               OutputPort<std::string>("name_of_task"),
               OutputPort<int>(PICS_TAKEN),
               OutputPort<int>(NUM_DETECTED),

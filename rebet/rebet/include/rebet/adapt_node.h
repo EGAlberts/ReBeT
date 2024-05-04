@@ -357,7 +357,7 @@ class AdaptOnConditionOnStart : public AdaptOnCondition<ParamT>, public virtual 
         else if(adaptation_type_ == AdaptationType::Internal)
         {
           sendAdaptationRequest<aal_msgs::srv::AdaptArchitecture, aal_msgs::srv::AdaptArchitecture::Request>(
-            "/adapt_architecture'", strategy_name, offline_adapt_client_, this->registrationName());
+            "/adapt_architecture", strategy_name, offline_adapt_client_, this->registrationName());
         }
         time_request_sent_ = node_->now();
       }

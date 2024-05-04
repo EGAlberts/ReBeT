@@ -44,12 +44,16 @@ class SystemReflection(Node):
         self.laserscan_subscription = self.create_subscription(LaserScan,'/scan',self.ls_scan_cb,1,callback_group=MutuallyExclusiveCallbackGroup())
         self.odometry_subscription = self.create_subscription(Odometry,'/odom',self.tb_odom_cb,10, callback_group = MutuallyExclusiveCallbackGroup())
         
+        self.lighting_subscription = self.create_subscription(Float32,'/current_lighting',self.current_lighting_cb,10, callback_group = MutuallyExclusiveCallbackGroup())
+
+        
         self.pipeline_distance_inspected_sub = self.create_subscription(Float32,'pipeline/distance_inspected',self.distance_inspected_cb,1,callback_group=MutuallyExclusiveCallbackGroup())
 
         self.distance_inspected_msg = None
         self.req = SetAttributesInBlackboard.Request()
         self.odom_msg = None
         self.laser_msg = None
+        self.current_lighting_msg = None
         self.diagnostic_values = queue.Queue() #queue of diagnostic KeyValue
         self.time_monitor_timer = self.create_timer(2, self.do_stuff, callback_group=timer_cb_group)
         self.battery_state = None
@@ -77,6 +81,9 @@ class SystemReflection(Node):
 
     def distance_inspected_cb(self, msg):
         self.distance_inspected_msg = msg
+
+    def current_lighting_cb(self, msg):
+        self.current_lighting_msg = msg
 
     def tb_odom_cb(self,msg):
         self.odom_msg = msg
@@ -159,6 +166,19 @@ class SystemReflection(Node):
             self.req.sys_attributes.append(new_sys_att)
 
             self.distance_inspected_msg = None
+
+        if(self.current_lighting_msg is not None):
+            new_sys_att = SystemAttribute()
+            new_sys_att.name = 'current_lighting'
+
+            att_value = SystemAttributeValue()
+            att_value.header.stamp = self.get_clock().now().to_msg()
+            att_value.type = 4 #float type
+            att_value.float_value = self.current_lighting_msg
+            new_sys_att.value = att_value 
+            self.req.sys_attributes.append(new_sys_att)
+
+            self.current_lighting_msg = None
 
 
             # response = self.cli.call(self.req)

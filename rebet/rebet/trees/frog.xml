@@ -57,7 +57,7 @@
 									<SafetyQR weight="{safe_weight}" metric="{safe_metric}" mean_metric="{safe_mean_metric}" in_laser_scan="{laser_scan}">
 										<MovementPowerQR weight="{move_pow_weight}" metric="{move_pow_metric}" mean_metric="{move_pow_mean_metric}" in_odom="{odometry}"> 
 											<MovementEfficiencyQR weight="{move_eff_weight}" metric="{move_eff_metric}" mean_metric="{move_eff_mean_metric}" in_odom="{odometry}"> 
-												<AdaptMaxSpeedOff adaptation_period="3" adaptation_subject="max_velocity" subject_location="velocity_smoother" in_power="{move_pow_metric}" in_safety="{safe_metric}" in_movement="{move_pow_metric}" >
+												<AdaptMaxSpeedOff adaptation_period="3" adaptation_subject="max_velocity" subject_location="velocity_smoother" in_power="{move_pow_metric}" in_safety="{safe_metric}" in_movement="{move_eff_metric}" >
 													<ForceSuccess>
 														<visitObs poses="{route_poses}" name_of_task="{current_task}"/>
 													</ForceSuccess>

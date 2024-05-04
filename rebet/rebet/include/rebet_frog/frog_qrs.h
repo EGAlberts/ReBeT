@@ -40,8 +40,9 @@ class ObjectDetectionEfficiencyQR : public TaskLevelQR
       _counter = 0;
 
       _last_timestamp = builtin_interfaces::msg::Time();
-      num_obj_det_curr_exec = 0;
-      pictures_taken = 0.0;
+
+      objects_visited = 0.0;
+      goal_detected = 0;
     }
 
 
@@ -50,7 +51,9 @@ class ObjectDetectionEfficiencyQR : public TaskLevelQR
       PortsList base_ports = TaskLevelQR::providedPorts();
 
       PortsList child_ports =  {
-              InputPort<std::vector<rebet_msgs::msg::ObjectsIdentified>>(IN_OBJ,"The objects detected through the robot's camera")};
+              InputPort<std::vector<rebet_msgs::msg::ObjectsIdentified>>(IN_OBJ,"The objects detected through the robot's camera"),
+              OutputPort<std::vector<double>>(METRIC, "To what extent is this property fulfilled"),
+              OutputPort<std::vector<double>>(MEAN_METRIC, "To what extent is this property fulfilled on average"),};
       child_ports.merge(base_ports);
 
       return child_ports;
@@ -60,83 +63,109 @@ class ObjectDetectionEfficiencyQR : public TaskLevelQR
     {
       _counter += 1;
 
-      _metric = std::clamp((pictures_taken / MAX_DETECTABLE),0.0,1.0);
-      num_obj_det_curr_exec = 0;
-      pictures_taken = 0.0;
-      output_metric();
-      metric_mean();
-      setOutput(MEAN_METRIC,_average_metric);
+      if(process_task_progress())
+      {
+
+        std::cout << "succ measure in obj eff" << std::endl;
+
+        std::vector<double> both_metrics = {(float)goal_detected, objects_visited};
+
+        setOutput(METRIC,both_metrics);
+        _times_calculated++; 
+
+        //TODO: add average
+
+
+        //setOutput(MEAN_METRIC,_average_metric);
+      }
+
     }
 
-    void process_task_progress() //Filling the buffer/batch
+    bool process_task_progress() //Filling the buffer/batch
     {
       std::vector<rebet_msgs::msg::ObjectsIdentified> objects_msg_vec;
       setOutput(QR_STATE,not_detected); //default
 
 
-      getInput(IN_OBJ, objects_msg_vec);
+      auto res = getInput(IN_OBJ, objects_msg_vec);
 
-      if(objects_msg_vec[0].stamp != _last_timestamp)
+
+      if(res)
       {
-        for (const auto& obj_msg : objects_msg_vec) 
+   
+        if(objects_msg_vec[0].stamp != _last_timestamp)
         {
-          if(obj_msg.object_detected)
+          std::cout << " NEW OBJECT DET EFF OBJ STAMP \n" << std::endl;
+          for (const auto& obj_msg : objects_msg_vec) 
           {
-            setOutput(QR_STATE,detected);
+            if(obj_msg.object_detected)
+            {
+              setOutput(QR_STATE,detected);
+              for (const auto& object_name : obj_msg.object_names)
+              {
+                if(object_name == goal_object){
+                  goal_detected++;
+                }
+              }
+            }
+
+            // num_obj_det_curr_exec+=obj_msg.object_names.size();
+
           }
+          objects_visited+=1.0;
+          _last_timestamp = objects_msg_vec[0].stamp;
 
-          num_obj_det_curr_exec+=obj_msg.object_names.size();
-
+          return true;
         }
-        pictures_taken+=(double)objects_msg_vec.size();
-        _last_timestamp = objects_msg_vec[0].stamp;
       }
+
+      return false;
 
     }
 
-    virtual NodeStatus tick() override
-    {
-      setStatus(NodeStatus::RUNNING);
-      const NodeStatus child_status = child_node_->executeTick();
+    // virtual NodeStatus tick() override
+    // {
+    //   setStatus(NodeStatus::RUNNING);
+    //   const NodeStatus child_status = child_node_->executeTick();
 
-      switch (child_status)
-      {
-        case NodeStatus::SUCCESS: {
-          calculate_measure(); //Only after the task below has finished
-          resetChild();
-          return NodeStatus::SUCCESS;
-        }
+    //   switch (child_status)
+    //   {
+    //     case NodeStatus::SUCCESS: {
+    //       calculate_measure(); //Only after the task below has finished
+    //       resetChild();
+    //       return NodeStatus::SUCCESS;
+    //     }
 
-        case NodeStatus::FAILURE: {
-          resetChild();
-          return NodeStatus::FAILURE;
-        }
+    //     case NodeStatus::FAILURE: {
+    //       resetChild();
+    //       return NodeStatus::FAILURE;
+    //     }
 
-        case NodeStatus::RUNNING: {
-          process_task_progress();
-          return NodeStatus::RUNNING;
-        }
+    //     case NodeStatus::RUNNING: {
+    //       process_task_progress();
+    //       return NodeStatus::RUNNING;
+    //     }
 
-        case NodeStatus::SKIPPED: {
-          return NodeStatus::SKIPPED;
-        }
-        case NodeStatus::IDLE: {
-          throw LogicError("[", name(), "]: A child should not return IDLE");
-        }
-      }
-      return status();
+    //     case NodeStatus::SKIPPED: {
+    //       return NodeStatus::SKIPPED;
+    //     }
+    //     case NodeStatus::IDLE: {
+    //       throw LogicError("[", name(), "]: A child should not return IDLE");
+    //     }
+    //   }
+    //   return status();
 
-    }
+    // }
 
     private:
       std::string detected = std::string(OBJECT_DETECTED_STRING);
       std::string not_detected = std::string(OBJECT_NOT_DETECTED_STRING);
+      std::string goal_object = "fire hydrant";
 
-
-      int num_obj_det_curr_exec;
+      int goal_detected;
       builtin_interfaces::msg::Time _last_timestamp;
       const double MAX_DETECTABLE = 7.0; //Corresponds to the max picture rate assuming one object is detected per picture on average..
-      double pictures_taken;
+      double objects_visited;
       int _counter;
       static constexpr const char* IN_OBJ = "objs_identified";
       static constexpr const char* PIC_RATE = "current_pic_rate";
@@ -153,60 +182,83 @@ class ObjectDetectionPowerQR : public TaskLevelQR
       _obj_last_timestamp = builtin_interfaces::msg::Time();
 
       _higher_is_better = false;
-      pictures_taken = 0.0;      
+      pictures_taken = 0.0;    
+
+      int num_obstacles = 4;
+      int pics_per_obs = 5;
+      int min_pics = 1;
+      int freedom_to_det_extra = 2.5;
+
+      _power_budget = (double)(num_obstacles * pics_per_obs) * (double)(freedom_to_det_extra * (PIC_INCREMENT+min_pics)) * DETECTION_AVG_POW;
+
+      std::cout << "Initial Power Budget" << _power_budget << std::endl;
+      setOutput(METRIC,_power_budget);
+
     }
 
-    void process_task_progress()
+    bool process_task_progress()
     {
+      // std::cout << "proces task progress inside object det power qr" << std::endl;
       std::vector<rebet_msgs::msg::ObjectsIdentified> objects_msg_vec;
 
-      getInput(IN_OBJ, objects_msg_vec);
+      auto res = getInput(IN_OBJ, objects_msg_vec);
 
-
-      if(objects_msg_vec[0].stamp != _obj_last_timestamp)
+      if(res)
       {
-        for (const auto& obj_msg : objects_msg_vec) 
-        {
-          pictures_taken+=(double)objects_msg_vec.size();
-        }
-        _obj_last_timestamp = objects_msg_vec[0].stamp;
+          // std::cout << " got res for obj vec proces task progress inside object det power qr" << std::endl;
+
+          if(objects_msg_vec[0].stamp != _obj_last_timestamp)
+          {
+            for (const auto& obj_msg : objects_msg_vec) 
+            {
+              pictures_taken+=(double)objects_msg_vec.size();
+            }
+            _obj_last_timestamp = objects_msg_vec[0].stamp;
+
+            return true;
+          }
       }
+
+      // std::cout << " false reutnr proces task progress inside object det power qr" << std::endl;
+
+
+      return false;
 
     }
 
-    virtual NodeStatus tick() override
-    {
-      setStatus(NodeStatus::RUNNING);
-      const NodeStatus child_status = child_node_->executeTick();
+    // virtual NodeStatus tick() override
+    // {
+    //   setStatus(NodeStatus::RUNNING);
+    //   const NodeStatus child_status = child_node_->executeTick();
 
-      switch (child_status)
-      {
-        case NodeStatus::SUCCESS: {
-          calculate_measure(); //Only after the task below has finished
-          resetChild();
-          return NodeStatus::SUCCESS;
-        }
+    //   switch (child_status)
+    //   {
+    //     case NodeStatus::SUCCESS: {
+    //       calculate_measure(); //Only after the task below has finished
+    //       resetChild();
+    //       return NodeStatus::SUCCESS;
+    //     }
 
-        case NodeStatus::FAILURE: {
-          resetChild();
-          return NodeStatus::FAILURE;
-        }
+    //     case NodeStatus::FAILURE: {
+    //       resetChild();
+    //       return NodeStatus::FAILURE;
+    //     }
 
-        case NodeStatus::RUNNING: {
-          process_task_progress();
-          return NodeStatus::RUNNING;
-        }
+    //     case NodeStatus::RUNNING: {
+    //       process_task_progress();
+    //       return NodeStatus::RUNNING;
+    //     }
 
-        case NodeStatus::SKIPPED: {
-          return NodeStatus::SKIPPED;
-        }
-        case NodeStatus::IDLE: {
-          throw LogicError("[", name(), "]: A child should not return IDLE");
-        }
-      }
-      return status();
+    //     case NodeStatus::SKIPPED: {
+    //       return NodeStatus::SKIPPED;
+    //     }
+    //     case NodeStatus::IDLE: {
+    //       throw LogicError("[", name(), "]: A child should not return IDLE");
+    //     }
+    //   }
+    //   return status();
 
-    }
+    // }
 
 
     static PortsList providedPorts()
@@ -214,7 +266,9 @@ class ObjectDetectionPowerQR : public TaskLevelQR
       PortsList base_ports = TaskLevelQR::providedPorts();
 
       PortsList child_ports =  {
-              InputPort<std::vector<rebet_msgs::msg::ObjectsIdentified>>(IN_OBJ,"The objects detected through the robot's camera")};
+              InputPort<std::vector<rebet_msgs::msg::ObjectsIdentified>>(IN_OBJ,"The objects detected through the robot's camera"),
+              InputPort<int>(TOT_OBS, "how many obstacles there are"),
+              };
       child_ports.merge(base_ports);
 
       return child_ports;
@@ -222,11 +276,19 @@ class ObjectDetectionPowerQR : public TaskLevelQR
 
     virtual void calculate_measure() override
     {
-      _metric = pictures_taken * DETECTION_AVG_POW;
-      pictures_taken = 0.0;
-      output_metric();
-      metric_mean();
-      setOutput(MEAN_METRIC,_average_metric);
+      // std::cout << " calc measure object det power qr" << std::endl;
+      
+      if(process_task_progress())
+      {
+        // std::cout << " pos result proctaskprogress object det power qr" << std::endl;
+        std::cout << "pictures taken since last budget update apparently " << pictures_taken << std::endl;
+        _power_budget = _power_budget - (pictures_taken * DETECTION_AVG_POW);
+        _metric = _power_budget;
+        pictures_taken = 0.0;
+        output_metric();
+        metric_mean();
+        setOutput(MEAN_METRIC,_average_metric);
+      }
      
       
 
@@ -237,7 +299,7 @@ class ObjectDetectionPowerQR : public TaskLevelQR
       double pictures_taken;
       float _max_picture_consumption;
       float _max_picture_taken;
-
+      double _power_budget;
       int _window_length;
       int _window_start;
 
@@ -250,6 +312,7 @@ class ObjectDetectionPowerQR : public TaskLevelQR
 
       static constexpr const char* IN_PIC_RATE = "in_picture_rate";
       static constexpr const char* IN_OBJ = "objs_identified";
+      static constexpr const char* TOT_OBS = "obstacles_total";
 };
 
 
@@ -501,6 +564,7 @@ class SystemPowerQR : public SystemLevelQR
     virtual void calculate_measure() override
     {
       //As this is called on success, we assume for this case that child metrics only publish their values on their own respective successes.
+
       gather_child_metrics();
       
       double cumulative_task_consumptions = 0.0;
@@ -524,13 +588,12 @@ class SystemPowerQR : public SystemLevelQR
         setOutput(QR_STATE,"below_min"); //it is set back to OK in the BT elsewhere upon completing charging.
       }
 
-
       _laser_consumption = 0.0;
       _idle_consumption = 0.0;
 
     }
 
-    void system_power_consumption()
+    bool system_power_consumption()
     {
       auto curr_time_pointer = std::chrono::system_clock::now();
 
@@ -546,7 +609,11 @@ class SystemPowerQR : public SystemLevelQR
         _idle_consumption+=  IDLE_POW_PS;
 
         _window_start = current_time;
+
+        return true;
       }
+
+      return false;
 
     }
   
@@ -589,7 +656,7 @@ class SystemPowerQR : public SystemLevelQR
       float _laser_consumption;
       int _window_length;
       int _window_start;
-      const double MIN_CHARGE_THRESHOLD = 100.0;
+      const double MIN_CHARGE_THRESHOLD = 40.0;
       const float IDLE_POW_PS = 1.14; //as caused by the rebet software running. Idle consumption of the robot as a whole is considered a constant factor.
       const float LASER_POW_PS = 2.34; //watts
 
@@ -630,7 +697,6 @@ class MovementEfficiencyQR : public TaskLevelQR
     virtual void calculate_measure() override
     {
       auto res = getInput(IN_ODOM,_odom_attribute); 
-
       if(res)
       {
         _odom_msg = _odom_attribute.get<rebet::SystemAttributeType::ATTRIBUTE_ODOM>();

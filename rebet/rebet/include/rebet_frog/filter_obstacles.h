@@ -13,6 +13,8 @@ using namespace BT;
 
 
 using PoseStamped = geometry_msgs::msg::PoseStamped;
+using Point = geometry_msgs::msg::Point;
+
 
 
 void explore_group(int row, int col, std::vector<std::vector<double>>& group, std::vector<std::vector<bool>>& visited, std::vector<std::vector<int>>& grid) {
@@ -93,7 +95,7 @@ public:
     static constexpr const char* OBS_POS = "obstacle_positions";
     static constexpr const char* OBS_NUM = "obstacle_number";
     static constexpr const char* MAP_IN = "map_to_filter";
-    static constexpr const char* POSE_IN = "in_pose";
+    
 
 
     FilterObstacles(const std::string & instance_name,
@@ -107,9 +109,8 @@ public:
     {
     PortsList child_ports = { 
                 InputPort<nav_msgs::msg::OccupancyGrid>(MAP_IN),
-                OutputPort<std::vector<PoseStamped>>(OBS_POS),
+                OutputPort<std::vector<Point>>(OBS_POS),
                 OutputPort<int>(OBS_NUM),
-                InputPort<Odometry>(POSE_IN),
             };
 
     return child_ports;
@@ -202,11 +203,11 @@ public:
             horizontal_middle = (*std::max_element(all_the_ys.begin(), all_the_ys.end()) + *std::min_element(all_the_ys.begin(), all_the_ys.end())) / 2.0;
             vertical_bottom = *std::min_element(all_the_xs.begin(), all_the_xs.end());
 
-            points_to_visit.push_back({vertical_bottom - 0.4, -horizontal_middle + 0.15, atan2(-horizontal_middle - (-horizontal_middle + 0.15), vertical_bottom - (vertical_bottom - 0.4))});
+            points_to_visit.push_back({vertical_bottom, -horizontal_middle + 0.15});
             //the 0.4 is so the robot is a bit below and doesn't collide with the obstacle
         }
 
-        std::vector<PoseStamped> route_poses = {};
+        std::vector<Point> route_poses = {};
 
 
 
@@ -214,16 +215,16 @@ public:
         {
             if(filter_out_errors(pt))
             {
-                PoseStamped pose;
-                pose.header.frame_id = "map";
-                pose.pose.position.x = pt[0];
-                pose.pose.position.y = pt[1];
-                std::vector<double> q = quaternion_from_euler_again(0, 0, pt[2]);
-                pose.pose.orientation.x = q[0];
-                pose.pose.orientation.y = q[1];
-                pose.pose.orientation.z = q[2];
-                pose.pose.orientation.w = q[3];
-                route_poses.push_back(pose);
+                Point point;
+                // pose.header.frame_id = "map";
+                point.x = pt[0];
+                point.y = pt[1];
+                // std::vector<double> q = quaternion_from_euler_again(0, 0, pt[2]);
+                // pose.pose.orientation.x = q[0];
+                // pose.pose.orientation.y = q[1];
+                // pose.pose.orientation.z = q[2];
+                // pose.pose.orientation.w = q[3];
+                route_poses.push_back(point);
             }
         }
 
@@ -232,88 +233,92 @@ public:
 
 
 
-        std::vector<PoseStamped> reordered_visiting = {};
+        // std::vector<Point> reordered_visiting = {};
 
-        double min_dist = 9999999.0;
-        PoseStamped min_point;
+        // double min_dist = 9999999.0;
+        // PoseStamped min_point;
 
 
-        Odometry odom_obj;
+        // Odometry odom_obj;
 
-        getInput(POSE_IN,odom_obj);
-        for (PoseStamped & rt_pose : route_poses)
-        {
-            double dist_from_origin = euclidean_distance(odom_obj.pose.pose.position.x, odom_obj.pose.pose.position.y, rt_pose.pose.position.x,rt_pose.pose.position.y);
+        // getInput(POSE_IN,odom_obj);
+        // for (PoseStamped & rt_pose : route_poses)
+        // {
+        //     double dist_from_origin = euclidean_distance(odom_obj.pose.pose.position.x, odom_obj.pose.pose.position.y, rt_pose.x,rt_pose.y);
 
-            if(dist_from_origin < min_dist)
-            {
-                min_dist = dist_from_origin;
-                min_point = rt_pose;
-            }
+        //     if(dist_from_origin < min_dist)
+        //     {
+        //         min_dist = dist_from_origin;
+        //         min_point = rt_pose;
+        //     }
 
-        }
+        // }
         
-        reordered_visiting.push_back(min_point);
-        route_poses.erase(std::remove(route_poses.begin(), route_poses.end(), min_point), route_poses.end());
+        // reordered_visiting.push_back(min_point);
+        // route_poses.erase(std::remove(route_poses.begin(), route_poses.end(), min_point), route_poses.end());
 
-        while(!route_poses.empty())
-        {
-            PoseStamped last_entry = reordered_visiting.back();
-            // reordered_visiting.push_back(
-            //     min(route_poses,key=lambda rt_pose: euclidean_distance(last_entry.pose.position.x, last_entry.pose.position.y, rt_pose.pose.position.x,rt_pose.pose.position.y)))
+        // while(!route_poses.empty())
+        // {
+        //     Point last_entry = reordered_visiting.back();
+        //     // reordered_visiting.push_back(
+        //     //     min(route_poses,key=lambda rt_pose: euclidean_distance(last_entry.pose.position.x, last_entry.pose.position.y, rt_pose.pose.position.x,rt_pose.pose.position.y)))
             
             
-            min_dist = 9999999.0;
-            PoseStamped re_min_point;
-            for (PoseStamped & rt_pose : route_poses)
-            {
-                double dist_from_prev = euclidean_distance(last_entry.pose.position.x, last_entry.pose.position.y, rt_pose.pose.position.x,rt_pose.pose.position.y);
+        //     min_dist = 9999999.0;
+        //     Point re_min_point;
+        //     for (Point & rt_pose : route_poses)
+        //     {
+        //         double dist_from_prev = euclidean_distance(last_entry..x, last_entry.y, rt_pose.x,rt_pose.y);
 
-                if(dist_from_prev < min_dist)
-                {
-                    min_dist = dist_from_prev;
-                    re_min_point = rt_pose;
-                }
+        //         if(dist_from_prev < min_dist)
+        //         {
+        //             min_dist = dist_from_prev;
+        //             re_min_point = rt_pose;
+        //         }
 
-            }
-            reordered_visiting.push_back(re_min_point);
-            route_poses.erase(std::remove(route_poses.begin(), route_poses.end(), re_min_point), route_poses.end());
-        }
+        //     }
+        //     reordered_visiting.push_back(re_min_point);
+        //     route_poses.erase(std::remove(route_poses.begin(), route_poses.end(), re_min_point), route_poses.end());
+        // }
 
-        std::stringstream ss;
+        // std::stringstream ss;
 
-        for (const auto& pose : reordered_visiting) {    
-            ss << "(x: " << pose.pose.position.x << ", y: " << pose.pose.position.y << ")" << std::endl;
-        }
+        // for (const auto& pose : reordered_visiting) {    
+        //     ss << "(x: " << pose.pose.position.x << ", y: " << pose.pose.position.y << ")" << std::endl;
+        // }
 
-        std::cout << ss.str() << std::endl;
+        // std::cout << ss.str() << std::endl;
 
-        setOutput(OBS_POS, reordered_visiting);
-        setOutput(OBS_NUM, (int)reordered_visiting.size());
+        // setOutput(OBS_POS, reordered_visiting);
 
+        // setOutput(OBS_NUM, (int)reordered_visiting.size());
+
+        setOutput(OBS_POS, route_poses);
+
+        setOutput(OBS_NUM, (int)route_poses.size());
 
         return BT::NodeStatus::SUCCESS;
     }
 
     private:
-        std::vector<double> quaternion_from_euler_again(double ai, double aj, double ak) 
-        {
-            ai /= 2.0;
-            aj /= 2.0;
-            ak /= 2.0;
-            double ci = cos(ai);
-            double si = sin(ai);
-            double cj = cos(aj);
-            double sj = sin(aj);
-            double ck = cos(ak);
-            double sk = sin(ak);
-            double cc = ci*ck;
-            double cs = ci*sk;
-            double sc = si*ck;
-            double ss = si*sk;
+        // std::vector<double> quaternion_from_euler_again(double ai, double aj, double ak) 
+        // {
+        //     ai /= 2.0;
+        //     aj /= 2.0;
+        //     ak /= 2.0;
+        //     double ci = cos(ai);
+        //     double si = sin(ai);
+        //     double cj = cos(aj);
+        //     double sj = sin(aj);
+        //     double ck = cos(ak);
+        //     double sk = sin(ak);
+        //     double cc = ci*ck;
+        //     double cs = ci*sk;
+        //     double sc = si*ck;
+        //     double ss = si*sk;
 
-            return {cj*sc - sj*cs, cj*ss + sj*cc, cj*cs - sj*sc, cj*cc + sj*ss};
-        }
+        //     return {cj*sc - sj*cs, cj*ss + sj*cc, cj*cs - sj*sc, cj*cc + sj*ss};
+        // }
 
         double euclidean_distance(double x1, double y1, double x2, double y2)
         {

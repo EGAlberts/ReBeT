@@ -4,6 +4,7 @@ from ultralytics import YOLO
 from cv_bridge import CvBridge
 from rebet_msgs.srv import DetectObject
 import rclpy
+import cv2
 from rclpy.lifecycle import Node, State, TransitionCallbackReturn
 from ament_index_python.packages import get_package_share_directory
 from sensor_msgs.msg import Image
@@ -15,6 +16,7 @@ import time
 
 IMG_TOPIC_PARAM = "image_topic_name"
 PREDICTIONS_PARAM = "num_predictions"
+
 
 class YoloAsAService(Node):
 
@@ -29,7 +31,7 @@ class YoloAsAService(Node):
 
         self.model = YOLO(weight_dir)
 
-        self.declare_parameter(IMG_TOPIC_PARAM, '/camera/image_raw')
+        self.declare_parameter(IMG_TOPIC_PARAM, '/camera/image_noisy')
         self.topic_name = self.get_parameter(IMG_TOPIC_PARAM).get_parameter_value().string_value
 
         self.declare_parameter(PREDICTIONS_PARAM, 1)
@@ -50,7 +52,7 @@ class YoloAsAService(Node):
             if(param.name == IMG_TOPIC_PARAM and param.value != self.topic_name):
                 self.topic_name = param.value
                 self.destroy_subscription(self.subscription)
-                self.create_subscriber() #replace prev subscriber
+                self.create_image_subscriber() #replace prev subscriber
                 self.get_logger().info('Replaced current subscriber with subscriber to topic: "%s"' % param.value)
 
 
@@ -79,7 +81,7 @@ class YoloAsAService(Node):
 
         num_preds = self.get_parameter(PREDICTIONS_PARAM).get_parameter_value().integer_value
 
-        for i in range(len(num_preds)):
+        for i in range(num_preds):
             time.sleep(1)
             rgb_msg = self.image_received #assume to be new..
 
@@ -88,8 +90,9 @@ class YoloAsAService(Node):
             if rgb_msg is not None:
                 im = self.bridge.imgmsg_to_cv2(rgb_msg, desired_encoding="bgr8")
                 
-                results = self.model.predict(source=im, save=False, save_txt=False)  # save predictions as labels
-                
+                results = self.model.predict(source=im, save=False, save_txt=False, show=False)  # save predictions as labels
+                # cv2.waitKey(3000)
+                # cv2.destroyAllWindows()
                 obj_id.object_names = []
                 obj_id.probabilities = []
                 for i in range(len(results)):
@@ -102,8 +105,9 @@ class YoloAsAService(Node):
                 if(len(obj_id.object_names) > 0):
                     obj_id.object_detected = True
 
-                obj_id.stamp = self.get_clock().now().to_msg()
+            obj_id.stamp = self.get_clock().now().to_msg()
             response.objects_id.append(obj_id)
+        self.get_logger().info('sending response')
         
         response.id = request.id
         return response

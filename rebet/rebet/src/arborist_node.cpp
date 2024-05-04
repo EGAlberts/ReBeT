@@ -21,12 +21,14 @@
 #include "rebet_msgs/srv/set_weights.hpp"
 #include "rebet_msgs/msg/qr.hpp"
 #include "rebet_msgs/msg/system_attribute_value.hpp"
-
+#include "rebet/rebet_utilities.hpp"
 
 
 #include "rebet/system_attribute_value.hpp"
 
 #include "rebet_frog/gotopose_action_node.h"
+#include "rebet_frog/visitobstacle_action_node.h"
+#include "rebet_frog/spin_node.h"
 #include "rebet_frog/initial_pose.h"
 #include "rebet_frog/filter_obstacles.h"
 #include "rebet_frog/get_map.h"
@@ -114,7 +116,6 @@ public:
 
       // may throw ament_index_cpp::PackageNotFoundError exception
       std::string tree_dir = ament_index_cpp::get_package_share_directory("rebet") + "/trees/";
-      std::cout << tree_dir << std::endl;
 
       //_start_tree = this->create_service<SetBlackboard>("set_blackboard", std::bind(&Arborist::handle_set_bb, this, _1, _2));
       _start_tree = rclcpp_action::create_server<BTAction>(
@@ -141,15 +142,17 @@ public:
 
 
       registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_client", "navigate_to_pose", "visitObs");
+      
       registerTopicClient<ProvideInitialPose>(factory,"bt_initialpose_pub","initialPose");
+      registerTopicClient<SlowlySpin>(factory,"bt_spin_pub","slowlySpin");
       registerTopicClient<CameraFeedNode>(factory,"bt_camera_sub","CameraFeed");
       registerTopicClient<RobotPoseNode>(factory,"bt_getpose_sub","getRobotPose");
       registerServiceClient<GetMap>(factory,"bt_getmap_cli","getMap");
       registerServiceClient<FindFrontier>(factory,"bt_findfrontier_cli","findFrontier");
       registerServiceClient<IdentifyObjectService>(factory,"bt_detobj_srv_cli","NewIDObj");
 
-      registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_frontier_client", "navigate_to_pose", "visitFrontier");
-      registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_dock_client", "navigate_to_pose", "visitChargingDock");
+      registerActionClient<GoToPoseAction>(factory, "bt_gotopose_frontier_client", "navigate_to_pose", "visitFrontier");
+      registerActionClient<GoToPoseAction>(factory, "bt_gotopose_dock_client", "navigate_to_pose", "visitChargingDock");
       
       factory.registerNodeType<FilterObstacles>("filterObstacles");
       factory.registerNodeType<SleepNode>("Sleep");
@@ -183,8 +186,11 @@ public:
       // factory.registerNodeType<AdaptChargeConditionOffline>("WhetherToCharge");
       factory.registerNodeType<SetDockLocation>("SetChargingDockLocation");
 
+      
+      std::cout << "all nodes registered" << std::endl;
 
-      this->declare_parameter(BT_NAME_PARAM, "frog_aal.xml");
+
+      this->declare_parameter(BT_NAME_PARAM, "frog_aal_arch.xml");
       this->declare_parameter(EXP_NAME_PARAM, "no_experiment_name");
 
       bt_name = this->get_parameter(BT_NAME_PARAM).as_string();
@@ -231,6 +237,8 @@ public:
       // Apply the visitor to ALL the nodes of the tree
       tree.applyVisitor(node_visitor);
 
+      std::cout << "construction complete" << std::endl;
+
   }
 
   template <class T>
@@ -268,7 +276,7 @@ public:
 
     RosNodeParams params;
     params.nh = nh;
-    params.server_timeout = std::chrono::milliseconds(4000); //The YOLO can take quite a while.
+    params.server_timeout = std::chrono::milliseconds(YOLO_SERVICE_TIMEOUT_MILLISECOND); //The YOLO can take quite a while.
     factory.registerNodeType<T>(name_in_xml, params);
 
   }
@@ -340,7 +348,7 @@ private:
   void handle_set_param_bb(const std::shared_ptr<SetParameterInBlackboard::Request> request,
         std::shared_ptr<SetParameterInBlackboard::Response> response)
   {
-    RCLCPP_INFO(this->get_logger(), "Set Parameter Service Called in Arborist Node");
+    // RCLCPP_INFO(this->get_logger(), "Set Parameter Service Called in Arborist Node");
 
     for (auto const & ros_parameter : request->ros_parameters)
     {
@@ -409,6 +417,83 @@ private:
 
   }
 
+  int getIntOrNot(std::string blackboard_key)
+  {
+    bool gotten = false;
+    int value_to_get;
+    try
+    {
+      gotten = tree.rootBlackboard()->get<int>(blackboard_key,value_to_get);
+    }
+    catch (const std::runtime_error& error)
+    {
+      gotten = false;   
+    }
+
+    if(gotten)
+    {
+      return value_to_get;
+    }
+
+    return -10;
+
+  }
+
+  std::string getFloatOrNotVector(std::string blackboard_key)
+  {
+    bool gotten = false;
+    std::vector<double> value_to_get;
+    try
+    {
+      gotten = tree.rootBlackboard()->get<std::vector<double>>(blackboard_key,value_to_get);
+    }
+    catch (const std::runtime_error& error)
+    {
+      gotten = false;   
+    }
+
+    if(gotten)
+    {
+      std::stringstream ss;
+
+      for (size_t i = 0; i < value_to_get.size(); ++i) {
+        ss << value_to_get[i];
+
+        if (i != value_to_get.size() - 1) {
+            ss << ",";
+        }
+      }
+
+      return ss.str();
+    }
+
+    return "-10.0";
+
+  }
+
+  float getFloatOrNotSysAtt(std::string blackboard_key)
+  {
+      rebet::SystemAttributeValue _value_to_get;
+      bool gotten = false;
+      try
+      {
+        gotten = tree.rootBlackboard()->get<rebet::SystemAttributeValue>(blackboard_key,_value_to_get);
+      }
+      catch (const std::runtime_error& error)
+      {
+        gotten = false;   
+      }
+
+      if(gotten)
+      {
+        std_msgs::msg::Float32 as_val = _value_to_get.get<rebet::SystemAttributeType::ATTRIBUTE_FLOAT>();
+        return as_val.data;
+      }
+
+      return -10.0;
+
+  }
+
   std::string getStringOrNot(std::string blackboard_key)
   {
     bool gotten = false;
@@ -427,7 +512,7 @@ private:
       return value_to_get;
     }
 
-    return blackboard_key + " not available";
+    return blackboard_key + "not_available";
 
   }
 
@@ -656,7 +741,7 @@ private:
     int time_since_last = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     NodeStatus result_of_tick;
     int total_elapsed = 0;
-    int time_limit = 500;
+    int time_limit = 300;
 
 
     int spiral_search_time = 0;
@@ -710,148 +795,13 @@ private:
       // Check if goal is done
       if(result_of_tick != NodeStatus::RUNNING) {
         if (rclcpp::ok()) {
-
-          switch(result_of_tick) {
-            case NodeStatus::SUCCESS:
-              result->is_success = true;
-              break;
-            case NodeStatus::FAILURE:
-              result->is_success = false;
-              break;
-          }
-          goal_handle->succeed(result);
-          RCLCPP_INFO(this->get_logger(), "Goal finished: Done ticking the tree");
+          auto end_message = std_msgs::msg::String();
+          end_message.data = "!END!";
+          publisher_->publish(end_message);
           
-
-          if(bt_name == "frog.xml" || bt_name == "frog_norebet.xml" || bt_name == "frog_online.xml")
-          {
-            //Reporting on mission
-            std::vector<std::vector<float>> float_report_values = {average_safety_qrs, average_sys_power_qrs, average_mov_power_qrs, average_tsk_power_qrs, average_movement_qrs, average_task_qrs, safety_qrs, sys_power_qrs, mov_power_qrs, tsk_power_qrs, movement_qrs, out_pic_rates, task_qrs};
-
-            std::vector<std::string> report_strings = {};
-            for (auto const & thing_to_report : float_report_values)
-            {
-              std::cout << "1len " << thing_to_report.size() << std::endl;
-              std::string value_as_string = "";
-              for (auto const & value_to_report : thing_to_report)
-              {
-                value_as_string += std::to_string(value_to_report);
-                value_as_string += ";";
-              }
-              report_strings.push_back(value_as_string);
-            }
-
-            std::vector<std::vector<std::string>> string_report_values = {task_qr_states, max_velocities, pic_rates, average_utilities, task_names, rotations_done};
-
-            for (auto const & thing_to_report : string_report_values)
-            {
-              std::cout << "2len " << thing_to_report.size() << std::endl;
-              
-              std::string value_as_string = "";
-              for (auto const & value_to_report : thing_to_report)
-              {
-                value_as_string += value_to_report;
-                value_as_string += ";";
-              }
-              report_strings.push_back(value_as_string);
-            }
-
-            auto curr_time_pointer = std::chrono::system_clock::now();
-            int current_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
-
-            // file pointer
-            std::fstream fout;
-          
-            // opens an existing csv file or creates a new file.
-            fout.open("rebet_results.csv", std::ios::out | std::ios::app);
-          
-
-
-
-
-            // Header
-            fout << "timestamp" << ", " 
-                << "average_safety_qrs" << ", "
-                << "average_sys_power_qrs" << ", "
-                << "average_mov_power_qrs" << ", "
-                << "average_tsk_power_qrs" << ", "
-                << "average_movement_qrs" << ", "
-                << "average_task_qrs" << ", "
-                << "safety_qrs" << ", "
-                << "sys_power_qrs" << ", "
-                << "movement_power_qrs" << ", "
-                << "task_power_qrs" << ", "
-                << "movement_qrs" << ", "
-                << "out_pic_rates" << ", "
-                << "task_qrs" << ", "
-                << "task_qr_state" << ", "
-                << "max_velocities" << ", "
-                << "pic_rates" << ", "
-                << "average_utilities" << ", "
-                << "current_task" << ", "
-                << "rotations_done" << ", "
-                << "pictures_taken_total" << ", "
-                << "anything_detected_total" << ", "
-                << "bt_name" << "\n";
-
-
-            fout << current_time << ", ";
-
-            for (auto const & thing_to_report : report_strings)
-            {
-              fout << thing_to_report << ", ";
-
-            }
-            fout << getFloatOrNot("rep_pic_take") << ", ";
-            fout << getFloatOrNot("rep_num_ob") << ", "; 
-
-            fout << bt_name << "\n";
-
-              
-            fout.close();
-
-            std::ofstream outfile ("mission.done");
-
-            outfile << "." << std::endl;
-
-            outfile.close();
-          }
-          if(bt_name == "suave_offline.xml")
-          {
-            // file pointer
-            std::fstream fout;
-            // opens an existing csv file or creates a new file.
-            fout.open("suave_rebet_results.csv", std::ios::out | std::ios::app);
-          
-
-            auto curr_time_pointer = std::chrono::system_clock::now();
-
-
-
-            int curr_time = std::chrono::duration_cast<std::chrono::seconds>(curr_time_pointer.time_since_epoch()).count();
-
-            // Header
-            fout << "timestamp" << "," 
-                << "search time" << ","
-                << "distance covered" << ","
-                << "bt_name" << "\n";
-
-
-            fout << curr_time << ", ";
-            fout << spiral_search_time << ", ";
-            fout << distance_inspected << ", ";
-            fout << bt_name << "\n";
-              
-            fout.close();
-
-            std::ofstream outfile ("mission.done");
-
-            outfile << "." << std::endl;
-
-            outfile.close();
-          }
-          break;
+        
         }
+
 
       }
       else{
@@ -869,106 +819,46 @@ private:
           time_since_last = current_time;
 
           auto message = std_msgs::msg::String();
-          message.data = "sys_pow_metric: " + std::to_string(getFloatOrNot("sys_power_metric")) + "Move_pow_metric: " + std::to_string(getFloatOrNot("move_pow_metric"));
+          std::string header = std::to_string(total_elapsed) 
+          + " " + "bt_name"
+          + " " + "sys_pow_metric" 
+          + " " + "move_pow_metric" 
+          + " " + "safety_metric" 
+          + " " + "movement_efficiency" 
+          + " " + "current_lighting" 
+          + " " + "power_status" 
+          + " " + "current_task" 
+          + " " + "max_speed" 
+          + " " + "obj_det_eff" 
+          + " " + "obj_power" 
+          + " " + "pic_rate" 
+          + " " + "curr_cam_topic" 
+          + " " + "pics_taken" 
+          +";" ;
+
+          std::string values = std::to_string(total_elapsed) 
+          + " " + bt_name
+          + " " + std::to_string(getFloatOrNot("sys_power_metric")) 
+          + " " + std::to_string(getFloatOrNot("move_pow_metric")) 
+          + " " + std::to_string(getFloatOrNot("safe_metric")) 
+          + " " + std::to_string(getFloatOrNot("move_eff_metric")) 
+          + " " + std::to_string(getFloatOrNotSysAtt("current_lighting")) 
+          + " " + getStringOrNot("power_status") 
+          + " " + getStringOrNot("current_task") 
+          + " " + std::to_string(getFloatOrNot("max_speed"))
+          + " " + getFloatOrNotVector("task_metric")
+          + " " + std::to_string(getFloatOrNot("obj_power_metric"))
+          + " " + std::to_string(getIntOrNot("pic_rate"))
+          + " " + getStringOrNot("cam_feed")
+          + " " + std::to_string(getFloatOrNot("rep_pic_take"));
+
+
+
+
+          message.data = header + values;
+
           publisher_->publish(message);
-          if(bt_name == "suave_offline.xml")
-          {
-            time_limit = 300;
-            std::string task1 = "SpiralSearch";
-            std::string task2 = "FollowPipeline";
 
-            std::string current_task = getStringOrNot("current_task");
-
-            if(current_task == task1)
-            {
-              spiral_search_time+=1;
-            }
-
-
-            rebet::SystemAttributeValue _value_to_get;
-            bool gotten = false;
-            try
-            {
-              gotten = tree.rootBlackboard()->get<rebet::SystemAttributeValue>("distance_inspected",_value_to_get);
-            }
-            catch (const std::runtime_error& error)
-            {
-              gotten = false;   
-            }
-
-            if(gotten)
-            {
-              std_msgs::msg::Float32 as_val = _value_to_get.get<rebet::SystemAttributeType::ATTRIBUTE_FLOAT>();
-              distance_inspected = as_val.data;
-            }
-
-
-
-
-
-
-
-          }
-          else if(bt_name == "frog.xml" || bt_name == "frog_norebet.xml" || bt_name == "frog_online.xml")
-          {
-            RCLCPP_INFO(this->get_logger(), "\n\nloggingggg\n\n");
-
-            std::string charge_status = getStringOrNot("charge_or_not");
-
-            std::cout << "CHARGE STATUS: " << charge_status << std::endl;
-
-            average_safety_qrs.push_back(getFloatOrNot("safe_mean_metric"));
-            std::cout << 1;
-            average_sys_power_qrs.push_back(getFloatOrNot("sys_power_mean_metric"));
-            std::cout << 2;
-            average_mov_power_qrs.push_back(getFloatOrNot("move_pow_mean_metric"));
-            std::cout << 3;
-            average_tsk_power_qrs.push_back(getFloatOrNot("obj_pow_mean_metric"));
-            std::cout << 4;
-            average_movement_qrs.push_back(getFloatOrNot("move_eff_mean_metric"));
-            std::cout << 5;
-            average_task_qrs.push_back(getFloatOrNot("task_mean_metric"));
-            std::cout << 6;
-
-
-            safety_qrs.push_back(getFloatOrNot("safe_metric"));
-            std::cout << 7;
-            
-            sys_power_qrs.push_back(getFloatOrNot("sys_power_metric"));
-            std::cout << 8;
-
-            mov_power_qrs.push_back(getFloatOrNot("move_pow_metric"));
-            std::cout << 9;
-
-            tsk_power_qrs.push_back(getFloatOrNot("obj_power_metric"));
-            std::cout << 10;
-
-
-            movement_qrs.push_back(getFloatOrNot("move_eff_metric"));
-            std::cout << 11;
-    
-            out_pic_rates.push_back(getFloatOrNot("elastic_pic"));
-            std::cout << 2;
-
-            task_qrs.push_back(getFloatOrNot("task_metric"));
-            std::cout << 2;
-
-
-            task_qr_states.push_back(getStringOrNot("obj_task_state"));
-            pic_rates.push_back(getStringOrNot("pic_rate"));
-
-           
-            max_velocities.push_back(getStringOrNot("max_velocity"));
-
-
-            average_utilities.push_back(getStringOrNot("average_utility"));
-
-            task_names.push_back(getStringOrNot("current_task"));
-
-            rotations_done.push_back(getStringOrNot("rot_done"));
-
-           
-          }
         }
       }
 
@@ -1022,9 +912,6 @@ private:
 
 int main(int argc, char * argv[])
 {
-  std::cout << "Now I'm here and I wish that I wasn't";
-  
-
   rclcpp::init(argc, argv);
 
   auto node = std::make_shared<Arborist>();

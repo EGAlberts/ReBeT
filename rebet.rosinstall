@@ -10,4 +10,7 @@ repositories:
   mavros_msgs:
     type: git
     url: https://github.com/EGAlberts/mavros_msgs.git
+  suave_msgs:
+    type: git
+    url: https://github.com/EGAlberts/suave_msgs.git
 

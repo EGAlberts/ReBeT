@@ -13,4 +13,6 @@ repositories:
   suave_msgs:
     type: git
     url: https://github.com/EGAlberts/suave_msgs.git
-
+  aal:
+    type: git
+    url: https://github.com/EGAlberts/AAL-ROS2.git

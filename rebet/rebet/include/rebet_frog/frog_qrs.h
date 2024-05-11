@@ -339,10 +339,6 @@ class MovementPowerQR : public TaskLevelQR
       return child_ports;
     }
 
-    static float calculate_power_motion(float speed) {
-      return 6.25 * pow(speed, 2) + 9.79 * speed + 3.66;
-    }
-
     void process_movement_progress()
     {
       auto res = getInput(IN_ODOM,_odom_attribute); 

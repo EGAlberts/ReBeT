@@ -1,4 +1,3 @@
-
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include <cmath>
 #include "behaviortree_ros2/bt_topic_sub_node.hpp"

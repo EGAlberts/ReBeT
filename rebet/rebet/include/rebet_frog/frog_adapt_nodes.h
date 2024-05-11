@@ -18,11 +18,11 @@
 namespace BT
 {
 
-class AdaptPictureRateOnline: public AdaptOnConditionOnStart<int>
+class AdaptPictureRateExternal: public AdaptOnConditionOnStart<int>
 {
   public:
 
-    AdaptPictureRateOnline(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnStart<int>(name, config, AdaptationTarget::RosParameter, AdaptationType::External)
+    AdaptPictureRateExternal(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnStart<int>(name, config, AdaptationTarget::RosParameter, AdaptationType::External)
     {
       _condition_default = true;
       registerAdaptations();
@@ -68,7 +68,7 @@ class FromExploreToIdentify: public AdaptOnConditionOnStart<int>
     
     virtual bool evaluate_condition() override
     {
-      _offline_adaptations = {};
+      _internal_adaptations = {};
       
       std::vector<std::string> node_names;
       getInput(ADAP_LOC, node_names);
@@ -96,9 +96,9 @@ class FromExploreToIdentify: public AdaptOnConditionOnStart<int>
       adaptthree.lifecycle_adaptation = configure_transition;
       adaptthree.node_name = node_names[0];
 
-      _offline_adaptations.push_back(adaptwo);
-      _offline_adaptations.push_back(adaptthree);
-      _offline_adaptations.push_back(adap);
+      _internal_adaptations.push_back(adaptwo);
+      _internal_adaptations.push_back(adaptthree);
+      _internal_adaptations.push_back(adap);
 
       return true;
 
@@ -108,11 +108,11 @@ class FromExploreToIdentify: public AdaptOnConditionOnStart<int>
 };
 
 
-class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
+class AdaptPictureRateInternal: public AdaptOnConditionOnStart<int>
 {
   public:
 
-    AdaptPictureRateOffline(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnStart<int>(name, config, AdaptationTarget::RosParameter, AdaptationType::Internal)
+    AdaptPictureRateInternal(const std::string& name, const NodeConfig& config) : AdaptOnConditionOnStart<int>(name, config, AdaptationTarget::RosParameter, AdaptationType::Internal)
     {
       _condition_default = true;
       registerAdaptations();
@@ -193,7 +193,7 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
       adap.parameter_adaptation = adap_param.to_parameter_msg();
       adap.node_name = node_name;
 
-      _offline_adaptations.push_back(adap);
+      _internal_adaptations.push_back(adap);
 
     }
 
@@ -218,7 +218,7 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
       adap.parameter_adaptation = adap_param.to_parameter_msg();
       adap.node_name = node_name;
 
-      _offline_adaptations.push_back(adap);
+      _internal_adaptations.push_back(adap);
 
       current_image_feed = new_topic_name;
 
@@ -229,7 +229,7 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
 
     bool increased_pic_rate()
     {
-      _offline_adaptations = {};
+      _internal_adaptations = {};
 
       if(_current_pic_rate != _max_pic_rate)
       {
@@ -243,7 +243,7 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
 
     bool set_pic_rate(int new_pic_rate)
     {
-      _offline_adaptations = {};
+      _internal_adaptations = {};
       if(new_pic_rate != _current_pic_rate)
       {
         pic_adaptation_msg(new_pic_rate);
@@ -370,11 +370,11 @@ class AdaptPictureRateOffline: public AdaptOnConditionOnStart<int>
 
 };
 
-class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
+class AdaptMaxSpeedExternal : public AdaptPeriodicallyOnRunning<double>
 {
   public:
 
-    AdaptMaxSpeedOnline(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::External)
+    AdaptMaxSpeedExternal(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::External)
     {
       //Since we are only interested in modifying the x-axis (backwards/forwards) speed, we wrap the adaptation_options given into the required triple of x y theta speeds.
         std::vector<double> param_values;
@@ -385,7 +385,7 @@ class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
         getInput(ADAP_LOC, node_name);
 
         
-
+        power_qr_max_value = (double)calculate_power_motion(WAFFLE_MAX_LIN_VEL);
         aal_msgs::msg::AdaptationOptions variable_param = aal_msgs::msg::AdaptationOptions();
 
 
@@ -434,11 +434,17 @@ class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
       return (current_safety > 0.15 || current_power < 4.0 || current_move_eff < 0.40);
     }
 
+    bool is_safe(double current_safety)
+    {
+      return current_safety < PROXIMITY_SAFETY_THRESHOLD;
+    }
+
 
 
 
     virtual double utility_of_adaptation(rcl_interfaces::msg::Parameter ros_parameter) override
     {
+      std::cout << "util_of_adap_max_speed" << std::endl;
       auto parameter_object = rclcpp::ParameterValue(ros_parameter.value);
 
       std::vector<double> chosen_speeds = parameter_object.get<std::vector<double>>();
@@ -460,79 +466,37 @@ class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
 
       if(safe_res && pow_res && move_res)
       {
-        if(chosen_max_speed == 0.10)
+        //MoveSafely is in violation.
+        if(!is_safe(current_safety) && chosen_max_speed > 0.10)
         {
-
-          if(unsafe_power_hungry(current_safety,current_power))
-          {
-            //GOOD
-            return 1.0;
-          }
-          else if(safe_lowpower_slow(current_safety,current_power, current_move))
-          {
-            //BAD
-            return 0.1;
-          }
-          else
-          {
-            //Average Safety, Average power, not slow.
-            return 0.25;
-          }
-        }
-        else if(chosen_max_speed == 0.18)
-        {
-          if(unsafe_power_hungry(current_safety,current_power))
-          {
-            //OK
-            return 0.4;
-          }
-          else if(safe_lowpower_slow(current_safety,current_power, current_move))
-          {
-            //OK
-            return 0.6;
-          }
-          else
-          {
-            //Average Safety, Average power, not slow.
-            return 0.5;
-          }
-        }
-        else if(chosen_max_speed == 0.26)
-        {
-    
-          if(unsafe_power_hungry(current_safety,current_power))
-          {
-            //BAD
-            return 0.0;
-          }
-          else if(safe_lowpower_slow(current_safety,current_power, current_move))
-          {
-            //GOOD
-            return 0.9;
-          }
-          else
-          {
-            //Average Safety, Average power, not slow.
-            return 0.75;
-          }
-
-          
+          return 0.0;
         }
         else
         {
-          std::cout << "chosen: " << chosen_max_speed << std::endl;
-          throw std::runtime_error("Chosen adaptations did not comply with max speed options ");
+          
+          double inverse_power = 1/current_power;
+
+          std::cout << "inverse_power " << inverse_power << " currentmove: " << current_move << std::endl; 
+
+
+          double utility = current_move * inverse_power;
+
+          if(utility < 0.0 || current_move < 0.0 || current_power < 0.0) //can happen if there's no values yet.
+          {
+            return 0.0;
+          }
+          return utility;
         }
 
       }
       else
       {
         std::cout << "For some reason a value was not found in the blackboard" << std::endl;  
-        return 0.5;
+        return 0.0;
       }
 
     }
-        // std::cout << "I'm here in offline max spd! \n\n" << std::endl;
+        // std::cout << "I'm here in internal max spd! \n\n" << std::endl;
         // if(safe_res && pow_res && move_res)
         // {
         //   std::cout << "now here curr_safe " << current_safety << " curr_pow " << current_power << std::endl;
@@ -558,16 +522,18 @@ class AdaptMaxSpeedOnline : public AdaptPeriodicallyOnRunning<double>
     static constexpr const char* SAFE_IN = "in_safety";
     static constexpr const char* MOVE_IN = "in_movement";
     static constexpr const char* SPD_OUT = "report_speed";
+    double PROXIMITY_SAFETY_THRESHOLD = 0.10;
+    double power_qr_max_value;
 
 
 };
 
 
-class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
+class AdaptMaxSpeedInternal : public AdaptPeriodicallyOnRunning<double>
 {
   public:
 
-    AdaptMaxSpeedOffline(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::Internal)
+    AdaptMaxSpeedInternal(const std::string& name, const NodeConfig& config) : AdaptPeriodicallyOnRunning<double>(name, config, AdaptationTarget::RosParameter, AdaptationType::Internal)
     {
       //Since we are only interested in modifying the x-axis (backwards/forwards) speed, we wrap the adaptation_options given into the required triple of x y theta speeds.
         std::vector<double> param_values;
@@ -616,13 +582,13 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
       adap.parameter_adaptation = adap_param.to_parameter_msg();
       adap.node_name = node_name;
 
-      _offline_adaptations.push_back(adap);
+      _internal_adaptations.push_back(adap);
 
     }
 
     bool decrease_speed()
     {
-      _offline_adaptations = {};
+      _internal_adaptations = {};
 
       double new_max_speed = _current_max_speed - SPEED_INCREMENT;
 
@@ -642,7 +608,7 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
 
     bool increase_speed()
     {
-      _offline_adaptations = {};
+      _internal_adaptations = {};
 
       double new_max_speed = _current_max_speed + SPEED_INCREMENT;
 
@@ -673,7 +639,7 @@ class AdaptMaxSpeedOffline : public AdaptPeriodicallyOnRunning<double>
 
 
 
-        std::cout << "I'm here in offline max spd! \n\n" << std::endl;
+        std::cout << "I'm here in internal max spd! \n\n" << std::endl;
         if(safe_res && pow_res && move_res)
         {
           std::cout << "now here curr_safe " << current_safety << " curr_pow " << current_power << std::endl;

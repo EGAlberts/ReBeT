@@ -29,6 +29,9 @@ class SystemReflection(Node):
     def __init__(self):
         print("Initializing the node...")
         #self.node_name = 'system_reflection'
+
+        #This node contains subscriptions to more than just FROG data, which is how it is meant to be.
+        
         super().__init__('system_reflection')
         
         timer_cb_group = MutuallyExclusiveCallbackGroup()

@@ -17,7 +17,6 @@
 #include "rebet_msgs/srv/set_parameter_in_blackboard.hpp"
 #include "rebet_msgs/srv/get_blackboard.hpp"
 #include "rebet_msgs/srv/get_qr.hpp"
-#include "rebet_msgs/srv/get_variable_params.hpp"
 #include "rebet_msgs/srv/set_weights.hpp"
 #include "rebet_msgs/msg/qr.hpp"
 #include "rebet_msgs/msg/system_attribute_value.hpp"
@@ -42,10 +41,6 @@
 #include "rebet_frog/frog_qrs.h"
 #include "rebet_frog/frog_adapt_nodes.h"
 
-#include "rebet_suave/suave_qrs.h"
-#include "rebet_suave/suave_adapt_nodes.h"
-
-
 #include "rebet/camera_feed_node.h"
 #include "rebet/robot_pose_node.h"
 #include "rebet/sleep_node.h"
@@ -54,12 +49,6 @@
 
 #include "rebet/qr_node.h"
 #include "rebet/adapt_node.h"
-#include "rebet_suave/spiral_search.h"
-#include "rebet_suave/follow_pipeline.h"
-#include "rebet_suave/arm_motors.h"
-#include "rebet_suave/set_mavros_mode.h"
-#include "rebet_suave/confirm_mavros_status.h"
-
 
 #include "behaviortree_cpp/loggers/groot2_publisher.h"
 
@@ -84,7 +73,6 @@ public:
   using SetBlackboard = rebet_msgs::srv::SetBlackboard;
   using GetBlackboard = rebet_msgs::srv::GetBlackboard;
   using GetQR = rebet_msgs::srv::GetQR;
-  using GetVParams = rebet_msgs::srv::GetVariableParams;
   using SetWeights = rebet_msgs::srv::SetWeights;
   using QR_MSG = rebet_msgs::msg::QR;
   using BTAction = rebet_msgs::action::BehaviorTree;
@@ -95,14 +83,13 @@ public:
   const std::string POW_WINDOW_LEN_NAME = "power_qa_window";
 
   const std::string BT_NAME_PARAM = "bt_filename";
-  const std::string EXP_NAME_PARAM = "experiment_name";
 
   
 
   BT::Tree tree;
   BehaviorTreeFactory factory;
   std::string bt_name;
-  std::string experiment_name;
+
   
   Arborist(std::string name = "arborist_node") : Node(name)
   { 
@@ -111,7 +98,6 @@ public:
       _set_blackboard = this->create_service<SetBlackboard>("set_blackboard", std::bind(&Arborist::handle_set_bb, this, _1, _2));
       _get_blackboard = this->create_service<GetBlackboard>("get_blackboard", std::bind(&Arborist::handle_get_bb, this, _1, _2));
       _get_qr = this->create_service<GetQR>("get_qr", std::bind(&Arborist::handle_get_qr, this, _1, _2));
-      // _get_var_param = this->create_service<GetVParams>("get_variable_params", std::bind(&Arborist::handle_get_var_params, this, _1, _2));
       _set_weights = this->create_service<SetWeights>("set_weights", std::bind(&Arborist::handle_set_weights, this, _1, _2));
 
       // may throw ament_index_cpp::PackageNotFoundError exception
@@ -131,16 +117,6 @@ public:
 
       // registerActionClient<IdentifyObjectAction>(factory, "bt_identifyobject_client", "checkForObjectsActionName", "identifyObject");
       
-      registerActionClient<SpiralSearch>(factory, "bt_spiral_client", "spiral", "SpiralSearch");
-      registerActionClient<FollowPipeline>(factory, "bt_follow_client", "follow", "FollowPipeline");
-      
-
-      registerTopicClient<ConfirmMavrosStatus>(factory, "bt_mavros_status_sub", "ConfirmMavrosState");
-      registerServiceClient<SetMavrosMode>(factory,"bt_mavrosmode_cli","SetMavrosMode");
-      registerServiceClient<ArmMotors>(factory,"bt_armmotors_cli","ArmMotors");
-
-
-
       registerActionClient<VisitObstacleAction>(factory, "bt_gotopose_client", "navigate_to_pose", "visitObs");
       
       registerTopicClient<ProvideInitialPose>(factory,"bt_initialpose_pub","initialPose");
@@ -169,32 +145,25 @@ public:
       factory.registerNodeType<MovementPowerQR>("MovementPowerQR");
 
 
-      factory.registerNodeType<SearchEfficiently>("SearchEfficiently");
-      factory.registerNodeType<MoveRobustly>("MoveRobustly");
-      factory.registerNodeType<AdaptPictureRateOnline>("AdaptPictureRate");
-      factory.registerNodeType<AdaptPictureRateOffline>("AdaptPictureRateOff");
+      factory.registerNodeType<AdaptPictureRateExternal>("AdaptPictureRate");
+      factory.registerNodeType<AdaptPictureRateInternal>("AdaptPictureRateOff");
 
-      factory.registerNodeType<AdaptSpiralAltitudeOnline>("AdaptSpiralAltitude");
-      factory.registerNodeType<AdaptSpiralAltitudeOffline>("AdaptSpiralAltitudeOff");
-      factory.registerNodeType<AdaptThrusterOffline>("AdaptThrusterRecovery");
-      factory.registerNodeType<AdaptMaxSpeedOnline>("AdaptMaxSpeed");
-      factory.registerNodeType<AdaptMaxSpeedOffline>("AdaptMaxSpeedOff");
+      factory.registerNodeType<AdaptMaxSpeedExternal>("AdaptMaxSpeed");
+      factory.registerNodeType<AdaptMaxSpeedInternal>("AdaptMaxSpeedOff");
 
       factory.registerNodeType<FromExploreToIdentify>("FromExploreToIdentify");
 
 
-      // factory.registerNodeType<AdaptChargeConditionOffline>("WhetherToCharge");
+      // factory.registerNodeType<AdaptChargeConditionInternal>("WhetherToCharge");
       factory.registerNodeType<SetDockLocation>("SetChargingDockLocation");
 
       
       std::cout << "all nodes registered" << std::endl;
 
 
-      this->declare_parameter(BT_NAME_PARAM, "frog_aal_arch.xml");
-      this->declare_parameter(EXP_NAME_PARAM, "no_experiment_name");
+      this->declare_parameter(BT_NAME_PARAM, "frog_aal_arch_external.xml");
 
       bt_name = this->get_parameter(BT_NAME_PARAM).as_string();
-      experiment_name = this->get_parameter(EXP_NAME_PARAM).as_string();
 
       RCLCPP_INFO(this->get_logger(), bt_name.c_str());
 
@@ -213,21 +182,16 @@ public:
       double max_objs_ps = this->get_parameter(MSN_MAX_OBJ_PS_NAME).as_double();
 
       float max_pics_ps = this->get_parameter(ENG_MAX_PIC_PS_NAME).as_double();
-      int msn_window_length = this->get_parameter(TSK_WINDOW_LEN_NAME).as_int();
       int pow_window_length = this->get_parameter(POW_WINDOW_LEN_NAME).as_int();
 
 
 
-      auto node_visitor = [max_objs_ps, msn_window_length, pow_window_length, max_pics_ps](TreeNode* node)
+      auto node_visitor = [max_objs_ps, pow_window_length, max_pics_ps](TreeNode* node)
       {
         if (auto power_qr_node = dynamic_cast<SystemPowerQR*>(node))
         {
           power_qr_node->initialize(max_pics_ps,
                                        pow_window_length);
-        }
-        if (auto search_qr_node = dynamic_cast<SearchEfficiently*>(node))
-        {
-          search_qr_node->initialize(5);
         }
       };
 
@@ -548,8 +512,6 @@ private:
   template <class QR_TYPE>
   std::vector<QR_TYPE*> get_tree_qrs()
   {    
-    std::cout << "2 Service to get a qr nodes from the blackboard" << std::endl;
-
     std::vector<QR_TYPE*> qr_nodes;
 
     for (auto const & sbtree : tree.subtrees) 
@@ -704,38 +666,6 @@ private:
     auto feedback = std::make_shared<BTAction::Feedback>();
     feedback->node_status = "placeholder";
 
-    std::vector<float> average_safety_qrs = {};
-    std::vector<float> average_sys_power_qrs = {};
-    std::vector<float> average_mov_power_qrs = {};
-    std::vector<float> average_tsk_power_qrs = {};
-    std::vector<float> average_movement_qrs = {};
-    std::vector<float> average_task_qrs = {};
-    std::vector<float> safety_qrs = {};
-    std::vector<float> sys_power_qrs = {};
-    std::vector<float> mov_power_qrs = {};
-    std::vector<float> tsk_power_qrs = {};
-
-    std::vector<float> movement_qrs = {};
-    std::vector<float> out_pic_rates = {};
-    std::vector<float> task_qrs = {};
-    std::vector<std::string> task_qr_states = {};
-
-
-    std::vector<std::string> max_velocities = {};
-    std::vector<std::string> pic_rates = {};
-    std::vector<std::string> average_utilities = {};
-    std::vector<std::string> task_names = {};
-    std::vector<std::string> rotations_done = {};
-
-
-
-
-    
-
-
-
-
-
     auto result = std::make_shared<BTAction::Result>();
     int elapsed_seconds = 0;
     int time_since_last = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -744,9 +674,6 @@ private:
     int time_limit = 300;
 
 
-    int spiral_search_time = 0;
-    int follow_pipeline_time = 0;
-    float distance_inspected = 0;
 
     do {
       // Check if there is a cancel request
@@ -851,9 +778,6 @@ private:
           + " " + std::to_string(getIntOrNot("pic_rate"))
           + " " + getStringOrNot("cam_feed")
           + " " + std::to_string(getFloatOrNot("rep_pic_take"));
-
-
-
 
           message.data = header + values;
 

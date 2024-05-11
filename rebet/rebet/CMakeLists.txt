@@ -19,8 +19,6 @@ find_package(nav_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(slam_toolbox REQUIRED)
-find_package(suave_msgs REQUIRED)
-find_package(mavros_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 find_package(wavefront_frontier_msgs REQUIRED)
@@ -40,7 +38,7 @@ add_executable(arborist src/arborist_node.cpp src/system_attribute_value.cpp)
 
 
 
-ament_target_dependencies(arborist rclcpp rclcpp_lifecycle behaviortree_ros2 behaviortree_cpp rebet_msgs lifecycle_msgs diagnostic_msgs geometry_msgs nav_msgs nav2_msgs sensor_msgs slam_toolbox suave_msgs mavros_msgs wavefront_frontier_msgs aal_msgs)
+ament_target_dependencies(arborist rclcpp rclcpp_lifecycle behaviortree_ros2 behaviortree_cpp rebet_msgs lifecycle_msgs diagnostic_msgs geometry_msgs nav_msgs nav2_msgs sensor_msgs slam_toolbox wavefront_frontier_msgs aal_msgs)
 
 # Install Cpp executables
 install(TARGETS
@@ -62,16 +60,12 @@ install(PROGRAMS
   scripts/yolo_as_a_service.py
   scripts/noisy_camera.py
   scripts/report_on_experiment.py
-  scripts/angles.py
-
-
 
   DESTINATION lib/${PROJECT_NAME}
 )
 
 install(DIRECTORY
   launch
-  worlds
   config
   trees
   DESTINATION share/${PROJECT_NAME}/

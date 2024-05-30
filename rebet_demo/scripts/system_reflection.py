@@ -91,8 +91,6 @@ class SystemReflection(Node):
             new_sys_att.value = att_value 
             self.req.sys_attributes.append(new_sys_att)
 
-            self.get_logger().info(str(new_sys_att))
-
             self.current_lighting_msg = None
         
 

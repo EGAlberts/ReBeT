@@ -54,6 +54,12 @@ def generate_launch_description():
 
 
     return LaunchDescription([
+        Node(
+            package='rebet_demo',
+            executable='change_lighting.py',
+            name='change_lighting',
+            output='screen'
+        ),
         register_event_handler_for_frontier_activation,
         register_event_handler_for_frontier_shutdown,
         yolo_node,

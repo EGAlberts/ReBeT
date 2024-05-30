@@ -80,7 +80,7 @@ public:
     {
       RCLCPP_INFO(node()->get_logger(), "safety metric: %f %s, move power metric: %f, move quick metric: %f, max_speed: %f, detect_efficiency: %s", getFloatOrNot("safe_metric"), getStringOrNot("safe_status").c_str(), getFloatOrNot("move_pow_metric"),getFloatOrNot("move_quick_metric"), getFloatOrNot("max_speed"), getFloatOrNotVector("det_eff_metric").c_str());
       total_elapsed++;
-      RCLCPP_INFO(node()->get_logger(), "%d/%d", total_elapsed, time_limit);
+      RCLCPP_INFO(node()->get_logger(), "%d seconds have passed", total_elapsed);
       time_since_last = current_time;
     }
     return std::nullopt;

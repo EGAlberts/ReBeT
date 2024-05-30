@@ -92,6 +92,7 @@ install(DIRECTORY
   launch
   config
   trees
+  models
   DESTINATION share/${PROJECT_NAME}/
 )
 

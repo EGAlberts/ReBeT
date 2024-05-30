@@ -1,0 +1,10 @@
+/arborist_node:
+  ros__parameters:
+    action_name: "behavior_server" # Optional (defaults to `bt_action_server`)
+    behavior_trees:
+      - rebet_demo/trees
+    plugins:
+      - rebet_demo/bt_plugins
+ 
+
+

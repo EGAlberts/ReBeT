@@ -1,0 +1,22 @@
+<root BTCPP_format="4" main_tree_to_execute="PatrolWarehouse">
+  	<BehaviorTree ID="PatrolWarehouse">
+		<Sequence>
+      <Parallel>
+        <MoveSafely metric="{@safe_metric}" status="{@safe_status}" in_laser_scan="{@laser_scan}">
+          <MovePowerEfficiently metric="{@move_pow_metric}" in_odom="{@odometry}"> 
+            <MoveQuickly metric="{@move_quick_metric}" in_odom="{@odometry}"> 
+                <Patrol action_name="follow_waypoints"/>
+            </MoveQuickly>
+          </MovePowerEfficiently> 
+        </MoveSafely>
+      
+        <DetectEfficiently metric="{@det_eff_metric}" status="{@det_eff_status}" in_object_identified="{objects_detected}">
+          <Repeat num_cycles="-1">
+            <Detect service_name="/detect_object_srv" pictures_taken="{@rep_pic_take}" object_identified="{objects_detected}"/>
+          </Repeat>
+        </DetectEfficiently>
+       
+    </Parallel>
+		</Sequence>
+  </BehaviorTree>
+</root>

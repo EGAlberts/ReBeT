@@ -1,0 +1,24 @@
+<root BTCPP_format="4" main_tree_to_execute="PatrolWarehouseAdapt">
+  	<BehaviorTree ID="PatrolWarehouseAdapt">
+		<Sequence>
+      <Parallel>
+        <MoveSafely metric="{@safe_metric}" status="{@safe_status}" in_laser_scan="{@laser_scan}">
+          <MovePowerEfficiently metric="{@move_pow_metric}" in_odom="{@odometry}"> 
+            <MoveQuickly metric="{@move_quick_metric}" in_odom="{@odometry}"> 
+                <AdaptMaxSpeed adaptation_strategy="ucb_strategy" adaptation_options="0.10;0.25;0.50" adaptation_period="3" adaptation_subject="max_velocity" subject_location="velocity_smoother" in_power="{@move_pow_metric}" in_safety="{@safe_status}" in_movement="{@move_quick_metric}" report_speed="{@max_speed}" >
+                  <Patrol action_name="follow_waypoints"/>
+                </AdaptMaxSpeed>
+            </MoveQuickly>
+          </MovePowerEfficiently> 
+        </MoveSafely>
+        <DetectEfficiently metric="{@det_eff_metric}" status="{@det_eff_status}" in_object_identified="{objects_detected}">
+          <Repeat num_cycles="-1">
+            <AdaptCameraFeed subject_location="detect_object" adaptation_subject="image_topic_name" deteff="{@det_eff_metric}" lighting="{@current_lighting}">
+              <Detect service_name="/detect_object_srv" pictures_taken="{@rep_pic_take}" object_identified="{objects_detected}"/>
+            </AdaptCameraFeed>
+          </Repeat>
+        </DetectEfficiently>
+    </Parallel>
+		</Sequence>
+  </BehaviorTree>
+</root>

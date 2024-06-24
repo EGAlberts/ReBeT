@@ -1,7 +1,5 @@
 int16 id
-sensor_msgs/Image image
 ---
 # Result definition
 int16 id
-string[] labels
-float32[] probabilities
+ObjectsIdentified[] objects_id

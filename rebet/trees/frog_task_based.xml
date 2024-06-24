@@ -1,0 +1,56 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="SLAMandCharge">
+  	
+
+
+
+	<Sequence>
+		<Script code="move_pow_weight:=1.0; move_pow_metric:=-10.0; power_status='OK'; sys_power_weight:=-10.0; sys_power_metric:=-10.0"/>
+		
+		<RetryUntilSuccessful num_attempts="-1">
+			<getRobotPose topic_name="/odom" out_pose="{current_pose}" />
+		</RetryUntilSuccessful>
+		<initialPose topic_name="initialpose" in_pose="{current_pose}" />
+		
+		<RetryUntilSuccessful num_attempts="50">
+			
+				<Switch2 variable="{power_status}" case_1="below_min" case_2="OK">
+					<Sequence>
+						<SetChargingDockLocation dock_position="{charge_poses}"/>
+						<RetryUntilSuccessful num_attempts="-1">
+							<visitChargingDock poses="{charge_poses}" name_of_task="{current_task}"/>
+						</RetryUntilSuccessful>
+						<Sleep msec="10000"/>
+						<SetBlackboard value="OK" output_key="power_status" />
+						<Sleep msec="1000"/>
+					</Sequence>
+					<Inverter>
+						<PowerQR weight="{sys_power_weight}" metric="{sys_power_metric}" mean_metric="{sys_power_mean_metric}" out_state="{power_status}">
+						<Sequence>
+							<RetryUntilSuccessful num_attempts="-1">
+								<getMap service_name="/slam_toolbox/dynamic_map" map_retrieved="{current_map}"/>
+							</RetryUntilSuccessful>
+
+							<RetryUntilSuccessful num_attempts="-1">
+								<getRobotPose topic_name="/odom" out_pose="{current_pose}" />
+							</RetryUntilSuccessful>
+							
+							<findFrontier service_name="/get_furthest_frontier" in_odom="{current_pose}" map_to_find_frontier="{current_map}" frontier_positions="{front_poses}"/>
+							
+							<MovementPowerQR weight="{move_pow_weight}" metric="{move_pow_metric}" mean_metric="{move_pow_mean_metric}" in_odom="{odometry}"> 
+								<ForceSuccess>
+									<visitFrontier poses="{front_poses}" name_of_task="{current_task}"/>
+								</ForceSuccess>
+							</MovementPowerQR> 
+						</Sequence>
+						</PowerQR>
+					</Inverter>
+					<SetBlackboard value="OK" output_key="power_status"/>
+				</Switch2>
+			
+		</RetryUntilSuccessful>
+
+		
+</Sequence>		
+  </BehaviorTree>
+</root>

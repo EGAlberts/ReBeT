@@ -17,11 +17,11 @@ for EXPNUM in {1..1}
 do
 	mate-terminal -- ./frontier_service.sh
 	sleep 3
-	mate-terminal -- "./start_gazebo.sh true 1"
+	mate-terminal -- ./start_gazebo.sh true 1
 	sleep 15
 	mate-terminal -- ./nav2.sh 
 	sleep 15
-	mate-terminal -- "./arborist.sh frog_task_based.xml 8"
+	mate-terminal -- ./arborist.sh frog_task_based.xml 8
 	sleep 3
 	mate-terminal -- ./sys_refl.sh
 	sleep 3

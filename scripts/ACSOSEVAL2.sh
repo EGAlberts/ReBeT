@@ -17,13 +17,13 @@ for EXPNUM in {1..25}
 do
 	mate-terminal -- ./darknet_auto.sh
 	sleep 5
-	mate-terminal -- "./start_gazebo.sh true 1"
+	mate-terminal -- ./start_gazebo.sh true 1
 	sleep 15
 	mate-terminal -- ./lighting.sh
 	sleep 5
 	mate-terminal -- ./nav2_map.sh 
 	sleep 15
-	mate-terminal -- "./arborist.sh frog_aal_arch_baseline.xml 8"
+	mate-terminal -- ./arborist.sh frog_aal_arch_baseline.xml 8
 	sleep 25
 	mate-terminal -- ./adap_sys.sh
 	sleep 3
@@ -48,13 +48,13 @@ for EXPNUM in {1..25}
 do
 	mate-terminal -- ./darknet_auto.sh
 	sleep 5
-	mate-terminal -- "./start_gazebo.sh true 1"
+	mate-terminal -- ./start_gazebo.sh true 1
 	sleep 15
 	mate-terminal -- ./lighting.sh
 	sleep 5
 	mate-terminal -- ./nav2_map.sh 
 	sleep 15
-	mate-terminal -- "./arborist.sh frog_aal_arch_internal.xml 8"
+	mate-terminal -- ./arborist.sh frog_aal_arch_internal.xml 8
 	sleep 25
 	mate-terminal -- ./adap_sys.sh
 	sleep 3
@@ -79,13 +79,13 @@ for EXPNUM in {1..25}
 do
 	mate-terminal -- ./darknet_auto.sh
 	sleep 5
-	mate-terminal -- "./start_gazebo.sh true 1"
+	mate-terminal -- ./start_gazebo.sh true 1
 	sleep 15
 	mate-terminal -- ./lighting.sh
 	sleep 5
 	mate-terminal -- ./nav2_map.sh 
 	sleep 15
-	mate-terminal -- "./arborist.sh frog_aal_arch_external.xml 8"
+	mate-terminal -- ./arborist.sh frog_aal_arch_external.xml 8
 	sleep 25
 	mate-terminal -- ./adap_sys.sh
 	sleep 3

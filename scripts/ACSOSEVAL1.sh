@@ -15,19 +15,19 @@ cd scripts
 
 for EXPNUM in {1..1}
 do
-	xfce4-terminal -e ./frontier_service.sh
+	mate-terminal -- ./frontier_service.sh
 	sleep 3
-	xfce4-terminal -e "./start_gazebo.sh true 1"
+	mate-terminal -- "./start_gazebo.sh true 1"
 	sleep 15
-	xfce4-terminal -e ./nav2.sh 
+	mate-terminal -- ./nav2.sh 
 	sleep 15
-	xfce4-terminal -e "./arborist.sh frog_task_based.xml 8"
+	mate-terminal -- "./arborist.sh frog_task_based.xml 8"
 	sleep 3
-	xfce4-terminal -e ./sys_refl.sh
+	mate-terminal -- ./sys_refl.sh
 	sleep 3
-	xfce4-terminal -e ./report.sh
+	mate-terminal -- ./report.sh
 	sleep 3
-	xfce4-terminal -e ./tree_action.sh 
+	mate-terminal -- ./tree_action.sh 
 	SECONDS=0 
 	while [ ! -f ~/rebet_ws/scripts/mission.done -a $SECONDS -lt 700 ]
 	do

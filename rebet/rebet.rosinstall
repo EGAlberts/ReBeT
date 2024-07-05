@@ -1,0 +1,17 @@
+repositories:
+  behaviortree_ros2:
+    type: git
+    url: https://github.com/BehaviorTree/BehaviorTree.ROS2.git
+    version: d701cc8
+  wavefront_frontier_exploration:
+    type: git
+    url: https://github.com/EGAlberts/wavefront_frontier_exploration.git
+    version: b673ae9
+  aal:
+    type: git
+    url: https://github.com/EGAlberts/AAL-ROS2.git
+    version: 9c054f4
+  turtlebot3_simulations:
+    type: git
+    url: https://github.com/ROBOTIS-GIT/turtlebot3_simulations.git
+    version: d16cdbe

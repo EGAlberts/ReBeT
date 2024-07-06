@@ -5,7 +5,7 @@
 		<Sequence>
 			<Script code="task_weight:=1.0; obj_power_weight:=1.0; obj_power_metric:=-10.0; move_pow_weight:=1.0; move_pow_metric:=-10.0; move_eff_weight:=1.0; move_eff_metric:=-10.0; safe_weight:=1.0; safe_metric:=-10.0"/>
 		
-			<!-- <SubTree ID="SLAMandCharge"/> -->
+			<!-- <SubTree ID="FrontierandCharge"/> -->
 
 			<RetryUntilSuccessful num_attempts="-1">
 				<getRobotPose topic_name="/odom" out_pose="{current_pose}" />
@@ -58,38 +58,5 @@
 
 			</DetectObjectsSavePower>
 					</Sequence>
-  </BehaviorTree>
-</root>
-			<!-- <Repeat num_cycles="-1">				
-				<Sequence>
-							<DetectObjectsSavePower weight="{obj_power_weight}" obstacles_total="{num_obstacles}" metric="{obj_power_metric}" objs_identified="{objects_detected}" mean_metric="{obj_pow_mean_metric}">
-							<!-- <DetectObjectsEfficiently weight="{task_weight}" objs_identified="{objects_detected}" metric="{task_metric}" mean_metric="{task_mean_metric}" out_state="{obj_task_state}" > -->
-								<Repeat num_cycles="{num_obstacles}">
-									<AdaptPictureRateOff adaptation_subject="pic_rate" in_power="{obj_power_metric}" in_pictask="{task_metric}" obstacles_total="{num_obstacles}" lighting_in="{current_lighting}">
-									<Sequence>
-						
-										<SafetyQR weight="{safe_weight}" metric="{safe_metric}" mean_metric="{safe_mean_metric}" in_laser_scan="{laser_scan}">
-										<MovementPowerQR weight="{move_pow_weight}" metric="{move_pow_metric}" mean_metric="{move_pow_mean_metric}" in_odom="{odometry}"> 
-										<MovementEfficiencyQR weight="{move_eff_weight}" metric="{move_eff_metric}" mean_metric="{move_eff_mean_metric}" in_odom="{odometry}"> 
-											<AdaptMaxSpeedOff adaptation_period="3" adaptation_subject="max_velocity" subject_location="velocity_smoother" in_power="{move_pow_metric}" in_safety="{safe_metric}" in_movement="{move_eff_metric}" >
-												<ForceSuccess>
-													<visitObs poses="{route_poses}" name_of_task="{current_task}"/>
-												</ForceSuccess>
-											</AdaptMaxSpeedOff>
-										</MovementEfficiencyQR>
-										</MovementPowerQR> 
-										</SafetyQR>
-
-										<NewIDObj pictures_taken="{rep_pic_take}" number_detected="{rep_num_ob}" service_name="/detect_object_srv" objs_identified="{objects_detected}" name_of_task="{current_task}"/>
-
-									</Sequence>
-									</AdaptPictureRateOff>
-								</Repeat>
-							<!-- </DetectObjectsEfficiently> -->
-							</DetectObjectsSavePower>
-				</Sequence>
-			</Repeat> -->
-			</FromExploreToIdentify>
-		</Sequence>
   </BehaviorTree>
 </root>

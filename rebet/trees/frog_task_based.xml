@@ -1,9 +1,5 @@
 <root BTCPP_format="4">
-  <BehaviorTree ID="SLAMandCharge">
-  	
-
-
-
+  <BehaviorTree ID="FrontierAndCharge">
 	<Sequence>
 		<Script code="move_pow_weight:=1.0; move_pow_metric:=-10.0; power_status='OK'; sys_power_weight:=-10.0; sys_power_metric:=-10.0"/>
 		

@@ -5,7 +5,7 @@
 		<Sequence>
 			<Script code="task_weight:=1.0; obj_power_weight:=1.0; obj_power_metric:=-10.0; move_pow_weight:=1.0; move_pow_metric:=-10.0; move_eff_weight:=1.0; move_eff_metric:=-10.0; safe_weight:=1.0; safe_metric:=-10.0"/>
 		
-			<!-- <SubTree ID="SLAMandCharge"/> -->
+			<!-- <SubTree ID="FrontierandCharge"/> -->
 			<Sleep msec="3000"/> 
 			<RetryUntilSuccessful num_attempts="-1">
 				<getRobotPose topic_name="/odom" out_pose="{current_pose}" />
@@ -19,7 +19,6 @@
 			</RetryUntilSuccessful>
 			
 			<filterObstacles map_to_filter="{current_map}" obstacle_positions="{route_poses}" obstacle_number="{num_obstacles}"/>
-			<!-- <FromExploreToIdentify subject_location="detect_object;get_frontier_service"> -->
 			<Sleep msec="1000"/>
 			<!-- </FromExploreToIdentify> -->
 				<Repeat num_cycles="-1">
@@ -46,8 +45,6 @@
 				</Repeat>
 
 				</Repeat>
-
-
 		</Sequence>
   </BehaviorTree>
 </root>

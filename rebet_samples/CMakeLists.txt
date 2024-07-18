@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(rebet)
+project(rebet_samples)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -14,31 +14,37 @@ find_package(rclpy REQUIRED)
 find_package(behaviortree_ros2 REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
 find_package(rebet_msgs REQUIRED)
+find_package(rebet REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(aal_msgs REQUIRED)
 
-# Include Cpp "include" directory
-include_directories(include)
 
-add_library(rebet
-    src/system_attribute_value.cpp
-)
+set(THIS_PACKAGE_DEPS
+    rclcpp
+    rclcpp_lifecycle 
+    behaviortree_ros2
+    behaviortree_cpp
+    rebet_msgs
+    rebet
+    std_msgs
+    aal_msgs)
 
+# Create Cpp executable
+add_executable(sample_arborist src/sample_arborist_node.cpp)
+ament_target_dependencies(sample_arborist ${THIS_PACKAGE_DEPS})
 
-target_include_directories(${PROJECT_NAME} PUBLIC
-        rebet_msgs
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
-        )
+add_library(snore_plugin SHARED src/snore_pub.cpp)
+target_compile_definitions(snore_plugin PRIVATE  BT_PLUGIN_EXPORT )
+ament_target_dependencies(snore_plugin ${THIS_PACKAGE_DEPS})
 
-ament_target_dependencies(${PROJECT_NAME} rebet_msgs)
+add_library(wake_plugin SHARED src/wake_pub.cpp)
+target_compile_definitions(wake_plugin PRIVATE  BT_PLUGIN_EXPORT )
+ament_target_dependencies(wake_plugin ${THIS_PACKAGE_DEPS})
 
-# ament_export_targets(${PROJECT_NAME})
-
-# Install targets
-install(TARGETS rebet
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
+# Install Cpp executables
+install(TARGETS
+sample_arborist
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 # Install Python modules
@@ -46,15 +52,29 @@ ament_python_install_package(${PROJECT_NAME})
 
 # Install Python executables
 install(PROGRAMS
-  scripts/blackboard_set_client.py
-  scripts/blackboard_get_client.py
-  scripts/weights_set_client.py
+  scripts/tree_action_client.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(
-  DIRECTORY include/
-  DESTINATION include
+install(TARGETS
+  snore_plugin
+  wake_plugin
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(TARGETS
+  snore_plugin
+  wake_plugin
+  LIBRARY DESTINATION share/${PROJECT_NAME}/bt_plugins
+  ARCHIVE DESTINATION share/${PROJECT_NAME}/bt_plugins
+  RUNTIME DESTINATION share/${PROJECT_NAME}/bt_plugins
+  )
+
+install(DIRECTORY
+  launch
+  config
+  trees
+  DESTINATION share/${PROJECT_NAME}/
 )
 
 
@@ -69,8 +89,5 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
-
-ament_export_include_directories(include)
-ament_export_libraries(${PROJECT_NAME})
 
 ament_package()

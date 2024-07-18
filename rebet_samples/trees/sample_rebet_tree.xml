@@ -1,0 +1,16 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="RebetSample">
+	  <Repeat num_cycles="3000">
+		  <Switch2 variable="{dont_sleep_status}" case_1="Get some more rest." case_2="Wake up!">
+			  <DontSleepTooLong metric="{dont_sleep_metric}" out_status="{dont_sleep_status}" sleep_count="{sleep_count}">
+			  <Parallel>
+			  	<Sleep2 msec="10000" sleep_count="{sleep_count}"/>
+			  	<Snore topic_name="sample_topic"/>
+			  </Parallel>	
+			  </DontSleepTooLong>
+			  <Wake topic_name="sample_topic"/>
+			  <SetBlackboard value="Get some more rest." output_key="dont_sleep_status"/>
+		  </Switch2>
+	  </Repeat>
+  </BehaviorTree>
+</root>

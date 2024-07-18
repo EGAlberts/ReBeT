@@ -1,5 +1,5 @@
-#ifndef rebet__PARAMETER_VALUE_HPP_
-#define rebet__PARAMETER_VALUE_HPP_
+#ifndef rebet__SYSTEM_ATTRIBUTE_HPP_
+#define rebet__SYSTEM_ATTRIBUTE_HPP_
 
 #include <exception>
 #include <iostream>
@@ -152,4 +152,4 @@ to_string(const SystemAttributeValue & type);
 
 } //namespace rebet
 
-#endif  // rebet__PARAMETER_VALUE_HPP_
+#endif  // rebet__SYSTEM_ATTRIBUTE_HPP_

@@ -1,12 +1,8 @@
 #pragma once
 
 #include "behaviortree_cpp/decorator_node.h"
-#include "geometry_msgs/msg/pose_stamped.hpp"
-#include "nav_msgs/msg/odometry.hpp"
-#include "sensor_msgs/msg/laser_scan.hpp"
+#include "behaviortree_cpp/behavior_tree.h"
 #include "rclcpp/rclcpp.hpp"
-
-#include "rebet_msgs/msg/objects_identified.hpp"
 #include "builtin_interfaces/msg/time.hpp"
 #include <algorithm>
 #include <chrono>
@@ -16,22 +12,10 @@
 namespace BT
 {
 /**
- * @brief The QRNode is used to constrain variable action nodes it decorates.
- *
- *
- * 
- *
- * 
- * 
- * 
- * 
- * 
- * Note: If in the future a BT should be designed with multiple instances of the same QR, it would become impractical. Right now the only feasible case it having two QRs which are never active simultaneously. 
- * In all other cases it would require creating a new (very similar) subclass as the linked blackboard entries would otherwise cause issue.
+ * @brief The QRNode is used to specify quality requirements which may influence the behavior of the nodes it decorates..
  */
 
-enum class QualityAttribute {Power, Safety, TaskEfficiency, MovementEfficiency};
-
+enum class QualityAttribute {Power, Safety, TaskEfficiency, MovementEfficiency, Test};
 
 class QRNode : public DecoratorNode
 {
@@ -49,12 +33,9 @@ public:
       return {InputPort<double>(WEIGHT, "How much influence this QR should have in the calculation of system utility"), 
               OutputPort<double>(METRIC, "To what extent is this property fulfilled"),
               OutputPort<double>(MEAN_METRIC, "To what extent is this property fulfilled on average"),
-              OutputPort<std::string>(QR_STATE, "Information as to the state the QR is currently in."),
+              OutputPort<std::string>(QR_STATUS, "Information as to the state the QR is currently in."),
               };
   }
-
-
-
 
   virtual ~QRNode() override = default;
 
@@ -64,7 +45,7 @@ public:
   //Names for the metric output ports
   static constexpr const char* METRIC = "metric";
   static constexpr const char* MEAN_METRIC = "mean_metric";
-  static constexpr const char* QR_STATE = "out_state";
+  static constexpr const char* QR_STATUS = "out_status";
 
   QualityAttribute qa_type()
   {
@@ -80,7 +61,6 @@ public:
   {
     return _higher_is_better;
   }
-
 
 private:
   int weight_;
@@ -118,14 +98,6 @@ private:
 
   }
 
-
-
-  
-
-
-
-  //void halt() override;
-
   protected:
     QualityAttribute _quality_attribute;
     int _times_calculated;
@@ -152,15 +124,11 @@ private:
       std::stringstream ss;
 
       ss << "Weight Port info received: ";
-      // for (auto number : feedback->left_time) {
       ss << weight_;
       std::cout << ss.str().c_str() << std::endl;
       std::cout << "Here's where I would calculate a measure... if I had one" << std::endl;
     }
-
-
 };
-
 
 class TaskLevelQR : public QRNode
 {
@@ -170,15 +138,13 @@ class TaskLevelQR : public QRNode
     }
 
 };
+
 class SystemLevelQR : public QRNode
 {
   public:
     SystemLevelQR(const std::string& name, const NodeConfig& config, QualityAttribute quality_attribute) : QRNode(name, config, quality_attribute)
     {
     }
-
-   
-
  
   protected:
     void gather_child_metrics()
@@ -195,13 +161,12 @@ class SystemLevelQR : public QRNode
               _sub_qr_metrics[task_qr_name] = task_qr_metric;
             }
           }
-
         };
 
         BT::applyRecursiveVisitor(child_node_, node_visitor);
       }
-  protected:
-      std::map<std::string, double> _sub_qr_metrics;
+
+    std::map<std::string, double> _sub_qr_metrics;
 
     virtual NodeStatus tick() override
     {
@@ -236,12 +201,5 @@ class SystemLevelQR : public QRNode
 
     }
 };
-
-
-
-
-
-
-
 
 }   // namespace BT

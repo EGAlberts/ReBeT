@@ -1,8 +1,6 @@
 #pragma once
 
 #include "behaviortree_cpp/decorator_node.h"
-#include "geometry_msgs/msg/pose_stamped.hpp"
-#include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 #include "aal_msgs/srv/adapt_architecture_external.hpp"
@@ -17,6 +15,7 @@
 #include "aal_msgs/msg/adaptation_options.hpp"
 #include "rcl_interfaces/msg/parameter_value.hpp"
 #include "lifecycle_msgs/msg/transition.hpp"
+
 namespace BT
 {
 /**
@@ -587,9 +586,6 @@ class AdaptOnConditionOnRunning : public AdaptOnCondition<ParamT>, public virtua
       }
 
     }
-    // if( (elapsed_seconds % 3) == 0 ){
-    //   std::cout << "window not expired yet " << elapsed_seconds << std::endl;
-    // }
 
     switch (child_status)
     {

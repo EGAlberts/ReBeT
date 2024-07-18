@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>rebet</name>
+  <name>rebet_samples</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
   <maintainer email="EGAlberts@github.com">ega</maintainer>
@@ -18,6 +18,8 @@
   <depend>lifecycle_msgs</depend>
   <depend>aal_msgs</depend>
     
+  <exec_depend>masced-bandits</exec_depend>
+  <exec_depend>masced_bandits</exec_depend>
   <exec_depend>ros2launch</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>

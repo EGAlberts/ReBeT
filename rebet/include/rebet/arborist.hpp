@@ -65,6 +65,12 @@ public:
       std::cout << "parent arborist construction complete" << std::endl;
   }
 
+  bool onGoalReceived(const std::string& tree_name, const std::string& payload) override
+  {
+    bt_name = tree_name;
+    return true;
+  }
+
 private:
 
   // bool inject_script_node(std::string script)

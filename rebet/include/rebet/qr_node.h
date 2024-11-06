@@ -17,15 +17,16 @@ namespace BT
 
 enum class QualityAttribute {Power, Safety, TaskEfficiency, MovementEfficiency, Test};
 
-class QRNode : public DecoratorNode
+class QRNode : public SimpleDecoratorNode
 {
 public:
 
-  QRNode(const std::string& name, const NodeConfig& config, QualityAttribute quality_attribute) : DecoratorNode(name, config)
+  QRNode(const std::string& name, const NodeConfig& config, QualityAttribute quality_attribute, NodeStatus calculation_status) : SimpleDecoratorNode(name, std::bind(&QRNode::qrCallback, this, std::placeholders::_1, std::placeholders::_2), config)
   {
     _quality_attribute = quality_attribute;
     _average_metric = 0.0;
     _times_calculated = 0;
+    _calculation_status = calculation_status;
   }
 
   static PortsList providedPorts()
@@ -65,48 +66,17 @@ public:
 private:
   int weight_;
   bool read_parameter_from_ports_;
-  virtual NodeStatus tick() override
-  {
-    setStatus(NodeStatus::RUNNING);
-    const NodeStatus child_status = child_node_->executeTick();
-
-    switch (child_status)
-    {
-      case NodeStatus::SUCCESS: {
-        resetChild();
-        return NodeStatus::SUCCESS;
-      }
-
-      case NodeStatus::FAILURE: {
-        resetChild();
-        return NodeStatus::FAILURE;
-      }
-
-      case NodeStatus::RUNNING: {
-        calculate_measure();
-        return NodeStatus::RUNNING;
-      }
-
-      case NodeStatus::SKIPPED: {
-        return NodeStatus::SKIPPED;
-      }
-      case NodeStatus::IDLE: {
-        throw LogicError("[", name(), "]: A child should not return IDLE");
-      }
-    }
-    return status();
-
-  }
 
   protected:
     QualityAttribute _quality_attribute;
+    NodeStatus _calculation_status;
     int _times_calculated;
     double _average_metric;
     double _metric;
     bool _higher_is_better = true;
 
 
-    void metric_mean()
+    void metric_mean() //May remove this in future.
     {
       double new_average = _average_metric + ((_metric - _average_metric) / (double)_times_calculated);
       _average_metric = new_average;
@@ -118,7 +88,7 @@ private:
       _times_calculated++; 
     }
 
-    virtual void calculate_measure()
+    virtual void calculate_measure(NodeStatus status)
     {
       getInput(WEIGHT, weight_);
       std::stringstream ss;
@@ -128,12 +98,28 @@ private:
       std::cout << ss.str().c_str() << std::endl;
       std::cout << "Here's where I would calculate a measure... if I had one" << std::endl;
     }
+
+//Calculate measure as the callback. Calculate measure should... do something specific to the child and then output it. 
+//The callback is overridden. It is always ticked with the status. Within the child you decide what you do when. General behavior is that the calculation status leads 
+    NodeStatus qrCallback(NodeStatus status, TreeNode& self)
+    {
+      calculate_measure(status);
+
+      if(status == _calculation_status)
+      {
+        output_metric();
+        metric_mean();
+        
+      }
+
+      return status;
+    }
 };
 
 class TaskLevelQR : public QRNode
 {
   public:
-    TaskLevelQR(const std::string& name, const NodeConfig& config, QualityAttribute quality_attribute) : QRNode(name, config, quality_attribute)
+    TaskLevelQR(const std::string& name, const NodeConfig& config, QualityAttribute quality_attribute, NodeStatus calculation_status) : QRNode(name, config, quality_attribute, calculation_status)
     {
     }
 
@@ -142,7 +128,7 @@ class TaskLevelQR : public QRNode
 class SystemLevelQR : public QRNode
 {
   public:
-    SystemLevelQR(const std::string& name, const NodeConfig& config, QualityAttribute quality_attribute) : QRNode(name, config, quality_attribute)
+    SystemLevelQR(const std::string& name, const NodeConfig& config, QualityAttribute quality_attribute, NodeStatus calculation_status) : QRNode(name, config, quality_attribute, calculation_status)
     {
     }
  
@@ -168,38 +154,38 @@ class SystemLevelQR : public QRNode
 
     std::map<std::string, double> _sub_qr_metrics;
 
-    virtual NodeStatus tick() override
-    {
-      setStatus(NodeStatus::RUNNING);
-      const NodeStatus child_status = child_node_->executeTick();
+    // virtual NodeStatus tick() override
+    // {
+    //   setStatus(NodeStatus::RUNNING);
+    //   const NodeStatus child_status = child_node_->executeTick();
 
-      switch (child_status)
-      {
-        case NodeStatus::SUCCESS: {
-          resetChild();
-          return NodeStatus::SUCCESS;
-        }
+    //   switch (child_status)
+    //   {
+    //     case NodeStatus::SUCCESS: {
+    //       resetChild();
+    //       return NodeStatus::SUCCESS;
+    //     }
 
-        case NodeStatus::FAILURE: {
-          resetChild();
-          return NodeStatus::FAILURE;
-        }
+    //     case NodeStatus::FAILURE: {
+    //       resetChild();
+    //       return NodeStatus::FAILURE;
+    //     }
 
-        case NodeStatus::RUNNING: {
-          calculate_measure();
-          return NodeStatus::RUNNING;
-        }
+    //     case NodeStatus::RUNNING: {
+    //       calculate_measure();
+    //       return NodeStatus::RUNNING;
+    //     }
 
-        case NodeStatus::SKIPPED: {
-          return NodeStatus::SKIPPED;
-        }
-        case NodeStatus::IDLE: {
-          throw LogicError("[", name(), "]: A child should not return IDLE");
-        }
-      }
-      return status();
+    //     case NodeStatus::SKIPPED: {
+    //       return NodeStatus::SKIPPED;
+    //     }
+    //     case NodeStatus::IDLE: {
+    //       throw LogicError("[", name(), "]: A child should not return IDLE");
+    //     }
+    //   }
+    //   return status();
 
-    }
+    // }
 };
 
 }   // namespace BT

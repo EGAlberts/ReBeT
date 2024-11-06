@@ -36,7 +36,7 @@ class SleepAndReport : public SleepNode
 class DontSleepTooLong : public TaskLevelQR
 {
   public:
-    DontSleepTooLong(const std::string& name, const NodeConfig& config) : TaskLevelQR(name, config, QualityAttribute::Test)
+    DontSleepTooLong(const std::string& name, const NodeConfig& config) : TaskLevelQR(name, config, QualityAttribute::Test, NodeStatus::RUNNING)
     { }
 
     static PortsList providedPorts()
@@ -49,31 +49,33 @@ class DontSleepTooLong : public TaskLevelQR
       return child_ports;
     }
 
-    virtual void calculate_measure() override
+    virtual void calculate_measure(NodeStatus status) override
     {
-      int sleep_count;
-      auto res = getInput("sleep_count", sleep_count);
-
-      if(res)
+      if(status == NodeStatus::RUNNING)
       {
-        _metric = sleep_count/sleep_threshold;
-        output_metric();
+        int sleep_count;
+        auto res = getInput("sleep_count", sleep_count);
 
-        if(sleep_count < sleep_threshold)
+        if(res)
         {
-          std::cout << "get rest" << std::endl;
-          std::cout << sleep_count << std::endl;
+          _metric = sleep_count/sleep_threshold;
 
-          setOutput(QR_STATUS,"Get some more rest.");
+          if(sleep_count < sleep_threshold)
+          {
+            std::cout << "get rest" << std::endl;
+            std::cout << sleep_count << std::endl;
+
+            setOutput(QR_STATUS,"Get some more rest.");
+          }
+          else
+          {
+            setOutput(QR_STATUS,"Wake up!");
+          }
         }
         else
         {
-          setOutput(QR_STATUS,"Wake up!");
+          std::cout << "not got sleep count" << std::endl;
         }
-      }
-      else
-      {
-        std::cout << "not got sleep count" << std::endl;
       }
     }
 

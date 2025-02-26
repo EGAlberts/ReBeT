@@ -2,4 +2,4 @@ int16 id
 ---
 # Result definition
 int16 id
-ObjectsIdentified[] objects_id
+rebet_msgs/ObjectsIdentified[] objects_id

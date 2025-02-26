@@ -71,7 +71,7 @@ public:
     return true;
   }
 
-private:
+protected:
 
   // bool inject_script_node(std::string script)
   // {
@@ -199,7 +199,7 @@ private:
   template <class QR_TYPE>
   std::vector<QR_TYPE*> get_tree_qrs()
   {    
-    std::vector<QR_TYPE*> qr_nodes;
+    std::vector<QR_TYPE*> qr_nodes = {};
 
     for (auto const & sbtree : tree.subtrees) 
     {
@@ -225,38 +225,28 @@ private:
 
   }
 
-  template <class QR_TYPE>
-  void get_metric_from_qrs(std::vector<QR_TYPE*> qr_nodes, std::shared_ptr<GetQR::Response>& response)
-  {    
-    // for (auto & node : qr_nodes) 
-    //     {
-    //       if(node->status() == NodeStatus::RUNNING) //ensures that the QRs are currently in effect.
-    //       {
-    //       auto node_config = node->config();
+  template <class QR_TYPE>  
+  std::vector<QR_MSG> create_qr_msgs(std::vector<QR_TYPE*> qr_nodes)
+  {
+    std::vector<QR_MSG> qr_msgs = {};
+    for (auto & node : qr_nodes) 
+    {
+      if(node->status() == NodeStatus::RUNNING) //ensures that the QRs are currently in effect.
+      {
 
-    //       auto weight = node_config.input_ports.find(QRNode::WEIGHT);
-    //       auto metric = node_config.output_ports.find(QRNode::METRIC);
+      // auto metric_bb_value = globalBlackboard()->get<double>((std::string)TreeNode::stripBlackboardPointer(metric->second));
+      // auto weight_bb_value = globalBlackboard()->get<double>((std::string)TreeNode::stripBlackboardPointer(weight->second));
 
-    //       if (weight == node_config.input_ports.end() || metric == node_config.output_ports.end())
-    //       {
-    //         std::stringstream ss;
-    //         ss << "Either port weight port " << QRNode::WEIGHT << " or metric port " << QRNode::METRIC << " not found within the QR node " << node->registrationName();
-    //         RCLCPP_ERROR(node()->get_logger(), ss.str().c_str());
-    //         return;
-    //       }
+      QR_MSG qr_msg;
+      qr_msg.qr_name = node->registrationName();
+      qr_msg.metric = node->current_metric();; 
+      qr_msg.weight = 1.0; //weight_bb_value; We don't use the weights right now, add a public getter (or equivalent) somehow once needed.
+      qr_msg.higher_is_better = node->is_higher_better();
 
-    //       auto metric_bb_value = globalBlackboard()->get<double>((std::string)TreeNode::stripBlackboardPointer(metric->second));
-    //       auto weight_bb_value = globalBlackboard()->get<double>((std::string)TreeNode::stripBlackboardPointer(weight->second));
-
-    //       QR_MSG qr_msg;
-    //       qr_msg.qr_name = node->registrationName();
-    //       qr_msg.metric = metric_bb_value; 
-    //       qr_msg.weight = weight_bb_value;
-    //       qr_msg.higher_is_better = node->is_higher_better();
-
-    //       response->qrs_in_tree.push_back(qr_msg);
-    //       }
-    //     } Restore, config() is now protected.
+      qr_msgs.push_back(qr_msg);
+      }
+    }
+    return qr_msgs;
   }
 
   template <class QR_TYPE>
@@ -314,12 +304,12 @@ private:
     if(request->at_system_level)
     {
       sys_qr_nodes = get_tree_qrs<SystemLevelQR>();
-      get_metric_from_qrs<SystemLevelQR>(sys_qr_nodes, response);
+      response->qrs_in_tree = create_qr_msgs<SystemLevelQR>(sys_qr_nodes);
     }
     else
     {
       tsk_qr_nodes = get_tree_qrs<TaskLevelQR>();
-      get_metric_from_qrs<TaskLevelQR>(tsk_qr_nodes, response);
+      response->qrs_in_tree = create_qr_msgs<TaskLevelQR>(tsk_qr_nodes);
 
     }
 

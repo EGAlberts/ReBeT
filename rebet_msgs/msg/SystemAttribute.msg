@@ -6,4 +6,4 @@ string name
 
 # `SystemAttributeValue.msg` and `SystemAttributeType.msg`.
 
-SystemAttributeValue value
+rebet_msgs/SystemAttributeValue value

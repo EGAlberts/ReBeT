@@ -16,6 +16,8 @@
 #include "rcl_interfaces/msg/parameter_value.hpp"
 #include "lifecycle_msgs/msg/transition.hpp"
 
+#include <tuple>
+
 namespace BT
 {
 /**
@@ -46,6 +48,7 @@ protected:
     rclcpp::Client<aal_msgs::srv::AdaptArchitectureExternal>::SharedPtr external_adapt_client_;
     rclcpp::Client<aal_msgs::srv::AdaptArchitecture>::SharedPtr internal_adapt_client_;
     std::vector<double> _current_utilities = {};
+    std::vector<double> _safeties = {};
     bool response_received_ = false;
     std::chrono::milliseconds service_timeout_ = std::chrono::milliseconds(ADAP_SERVICE_TIMEOUT_MILLISECOND);
     rclcpp::Time time_request_sent_;
@@ -55,7 +58,7 @@ protected:
     static constexpr const char* ADAP_SUB = "adaptation_subject";
     static constexpr const char* ADAP_LOC = "subject_location";
 
-    double evaluate_adaptation(aal_msgs::msg::Adaptation given_adaptation)
+    std::tuple<double,double> evaluate_adaptation(aal_msgs::msg::Adaptation given_adaptation)
     {
       switch(given_adaptation.adaptation_target)
       {
@@ -69,19 +72,19 @@ protected:
           std::cout << "no case could satisfy" << std::endl; 
       }
 
-      return -1.0;
+      return std::make_tuple(-1.0,-1.0);
     }
 
-    virtual double utility_of_adaptation(rcl_interfaces::msg::Parameter ros_parameter)
+    virtual std::tuple<double,double> utility_of_adaptation(rcl_interfaces::msg::Parameter ros_parameter)
     {
       //Meant for external adaptation.
-      return -1.0;
+      return std::make_tuple(-1.0,-1.0);
     }
 
-    virtual double utility_of_adaptation(lifecycle_msgs::msg::Transition ros_lc_transition)
+    virtual std::tuple<double,double> utility_of_adaptation(lifecycle_msgs::msg::Transition ros_lc_transition)
     {
       //Meant for external adaptation.
-      return -1.0;
+      return std::make_tuple(-1.0,-1.0);
     }
 
     template <typename AdaptationService, typename AdaptationRequest>
@@ -99,9 +102,8 @@ protected:
         request->task_identifier = registration_name;
         request->adaptation_strategy = strategy_name;
         request->utility_previous = _current_utilities;
+        request->safeties = _safeties;
         external_future_response_ = client->async_send_request(request).share();
-
-        
       }
       else if constexpr (std::is_same_v<AdaptationService, aal_msgs::srv::AdaptArchitecture>)
       {
@@ -147,14 +149,17 @@ protected:
             }
             else
             {
-              std:: cout << "filling utilities" << std::endl;
+              std::cout << "filling utilities" << std::endl;
               _current_utilities = {};
+              _safeties = {};
               for (auto const & adaptation : external_response_->applied_adaptations){
-                _current_utilities.push_back(evaluate_adaptation(adaptation));
+                std::tuple<double,double> evaluation = evaluate_adaptation(adaptation);
+                _current_utilities.push_back(std::get<0>(evaluation));
+                _safeties.push_back(std::get<1>(evaluation));
               }
 
               std:: cout << "filling utilities " << _current_utilities[0] << std::endl;
-
+              std:: cout << "filling safeties " << _safeties[0] << std::endl;
             
             }
 

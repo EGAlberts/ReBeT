@@ -72,13 +72,13 @@ protected:
       return -1.0;
     }
 
-    virtual double utility_of_adaptation(rcl_interfaces::msg::Parameter ros_parameter)
+    virtual double utility_of_adaptation(rcl_interfaces::msg::Parameter /*ros_parameter*/)
     {
       //Meant for external adaptation.
       return -1.0;
     }
 
-    virtual double utility_of_adaptation(lifecycle_msgs::msg::Transition ros_lc_transition)
+    virtual double utility_of_adaptation(lifecycle_msgs::msg::Transition /*ros_lc_transition*/)
     {
       //Meant for external adaptation.
       return -1.0;

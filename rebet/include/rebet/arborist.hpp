@@ -22,7 +22,6 @@
 
 #include <fstream>
 #include <iostream>
-#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <behaviortree_ros2/tree_execution_server.hpp>
 
 using namespace BT;
@@ -40,17 +39,7 @@ public:
   using GetQR = rebet_msgs::srv::GetQR;
   using SetWeights = rebet_msgs::srv::SetWeights;
   using QR_MSG = rebet_msgs::msg::QR;
-  const std::string MSN_MAX_OBJ_PS_NAME = "max_objects_per_second";
-  const std::string ENG_MAX_PIC_PS_NAME = "max_pictures_per_second";
-  const std::string TSK_WINDOW_LEN_NAME = "task_qa_window";
-  const std::string POW_WINDOW_LEN_NAME = "power_qa_window";
 
-  const std::string BT_NAME_PARAM = "bt_filename";
-
-  
-
-  BT::Tree tree;
-  BehaviorTreeFactory factory;
   std::string bt_name;
 
   
@@ -60,12 +49,12 @@ public:
       _set_att_in_blackboard = node()->create_service<SetAttributesInBlackboard>("set_attributes_in_blackboard", std::bind(&Arborist::handle_set_atb_bb, this, _1, _2));
       _get_blackboard = node()->create_service<GetBlackboard>("get_blackboard", std::bind(&Arborist::handle_get_bb, this, _1, _2));
       _get_qr = node()->create_service<GetQR>("get_qr", std::bind(&Arborist::handle_get_qr, this, _1, _2));
-      _set_weights = node()->create_service<SetWeights>("set_weights", std::bind(&Arborist::handle_set_weights, this, _1, _2));
+      // _set_weights = node()->create_service<SetWeights>("set_weights", std::bind(&Arborist::handle_set_weights, this, _1, _2));
       
       std::cout << "parent arborist construction complete" << std::endl;
   }
 
-  bool onGoalReceived(const std::string& tree_name, const std::string& payload) override
+  bool onGoalReceived(const std::string& tree_name, const std::string& /*payload*/) override
   {
     bt_name = tree_name;
     return true;
@@ -201,7 +190,7 @@ protected:
   {    
     std::vector<QR_TYPE*> qr_nodes = {};
 
-    for (auto const & sbtree : tree.subtrees) 
+    for (auto const & sbtree : tree().subtrees) 
     {
       for (auto & node : sbtree->nodes) 
       {
@@ -228,6 +217,7 @@ protected:
   template <class QR_TYPE>  
   std::vector<QR_MSG> create_qr_msgs(std::vector<QR_TYPE*> qr_nodes)
   {
+    std::cout << "create_qr_msgs function called" << std::endl;
     std::vector<QR_MSG> qr_msgs = {};
     for (auto & node : qr_nodes) 
     {
@@ -249,10 +239,10 @@ protected:
     return qr_msgs;
   }
 
-  template <class QR_TYPE>
-  bool set_weights_of_qrs(std::vector<QR_MSG> qr_msgs, std::vector<QR_TYPE*> qr_nodes)
-  {    
-    std::string script = "";
+  // template <class QR_TYPE>
+  // bool set_weights_of_qrs(std::vector<QR_MSG> qr_msgs, std::vector<QR_TYPE*> qr_nodes)
+  // {    
+  //   std::string script = "";
     // for (QR_MSG & qr_msg : qr_msgs)
     //   {
     //     std::string qr_name = qr_msg.qr_name;
@@ -283,13 +273,13 @@ protected:
 
     //   } TODO: Restore, config() is now protected.
 
-      script.pop_back();
-      script.pop_back(); //Removing the last '; ' as it isn't necessary.
+  //     script.pop_back();
+  //     script.pop_back(); //Removing the last '; ' as it isn't necessary.
 
-      return false; //TODO: RESTORE THIS FUNCTIONALITY
-      //return inject_script_node(script);
+  //     return false; //TODO: RESTORE THIS FUNCTIONALITY
+  //     //return inject_script_node(script);
 
-  }
+  // }
 
 
   
@@ -318,25 +308,25 @@ protected:
   }
 
 
-  void handle_set_weights(const std::shared_ptr<SetWeights::Request> request,
-        std::shared_ptr<SetWeights::Response> response)
-  {
-    std::vector<SystemLevelQR*> sys_qr_nodes;
-    std::vector<TaskLevelQR*> task_qr_nodes;
+  // void handle_set_weights(const std::shared_ptr<SetWeights::Request> request,
+  //       std::shared_ptr<SetWeights::Response> response)
+  // {
+  //   std::vector<SystemLevelQR*> sys_qr_nodes;
+  //   std::vector<TaskLevelQR*> task_qr_nodes;
 
-    sys_qr_nodes = get_tree_qrs<SystemLevelQR>();
+  //   sys_qr_nodes = get_tree_qrs<SystemLevelQR>();
     
-    task_qr_nodes = get_tree_qrs<TaskLevelQR>();
+  //   task_qr_nodes = get_tree_qrs<TaskLevelQR>();
 
-    std::vector<rebet_msgs::msg::QR> qr_msgs = request->qrs_to_update;
+  //   std::vector<rebet_msgs::msg::QR> qr_msgs = request->qrs_to_update;
 
-    response->success = (set_weights_of_qrs<SystemLevelQR>(qr_msgs,sys_qr_nodes) && set_weights_of_qrs<TaskLevelQR>(qr_msgs,task_qr_nodes));
+  //   response->success = (set_weights_of_qrs<SystemLevelQR>(qr_msgs,sys_qr_nodes) && set_weights_of_qrs<TaskLevelQR>(qr_msgs,task_qr_nodes));
  
-  }
+  // }
 
   rclcpp::Service<GetBlackboard>::SharedPtr _get_blackboard;
   rclcpp::Service<GetQR>::SharedPtr _get_qr;
-  rclcpp::Service<SetWeights>::SharedPtr _set_weights;
+  // rclcpp::Service<SetWeights>::SharedPtr _set_weights;
   rclcpp::Service<SetAttributesInBlackboard>::SharedPtr _set_att_in_blackboard;
   rclcpp::Service<SetParameterInBlackboard>::SharedPtr _set_param_in_blackboard;
 };

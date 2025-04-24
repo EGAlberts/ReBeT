@@ -56,9 +56,9 @@ class SystemAttributeValue
 {
 public:
   /// Construct a parameter value with type PARAMETER_NOT_SET.
-  
+
   SystemAttributeValue();
-  
+
   /// Construct a parameter value from a message.
   explicit SystemAttributeValue(const rebet_msgs::msg::SystemAttributeValue & value);
   /// Construct a parameter value with type PARAMETER_BOOL.
@@ -71,25 +71,23 @@ public:
   explicit SystemAttributeValue(const std_msgs::msg::Float32 float_value);
 
 
-
-
   /// Return an enum indicating the type of the set value.
-  
+
   SystemAttributeType
   get_type() const;
 
   /// Return a message populated with the parameter value
-  
+
   rebet_msgs::msg::SystemAttributeValue
   to_value_msg() const;
 
   /// Equal operator.
-  
+
   bool
   operator==(const SystemAttributeValue & rhs) const;
 
   /// Not equal operator.
-  
+
   bool
   operator!=(const SystemAttributeValue & rhs) const;
 
@@ -97,7 +95,8 @@ public:
 
   template<SystemAttributeType type>
   constexpr
-  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_ODOM, const nav_msgs::msg::Odometry &>::type
+  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_ODOM,
+    const nav_msgs::msg::Odometry &>::type
   get() const
   {
     if (value_.type != rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_ODOM) {
@@ -108,7 +107,8 @@ public:
 
   template<SystemAttributeType type>
   constexpr
-  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_DIAG, const diagnostic_msgs::msg::KeyValue &>::type
+  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_DIAG,
+    const diagnostic_msgs::msg::KeyValue &>::type
   get() const
   {
     if (value_.type != rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_DIAG) {
@@ -119,7 +119,8 @@ public:
 
   template<SystemAttributeType type>
   constexpr
-  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_LASER, const sensor_msgs::msg::LaserScan &>::type
+  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_LASER,
+    const sensor_msgs::msg::LaserScan &>::type
   get() const
   {
     if (value_.type != rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_LASER) {
@@ -130,7 +131,8 @@ public:
 
   template<SystemAttributeType type>
   constexpr
-  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_FLOAT, const std_msgs::msg::Float32 &>::type
+  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_FLOAT,
+    const std_msgs::msg::Float32 &>::type
   get() const
   {
     if (value_.type != rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_FLOAT) {
@@ -139,7 +141,6 @@ public:
     return value_.float_value;
   }
 
-  
 private:
   rebet_msgs::msg::SystemAttributeValue value_;
 };

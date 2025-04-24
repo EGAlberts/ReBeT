@@ -21,7 +21,7 @@ find_package(aal_msgs REQUIRED)
 
 set(THIS_PACKAGE_DEPS
     rclcpp
-    rclcpp_lifecycle 
+    rclcpp_lifecycle
     behaviortree_ros2
     behaviortree_cpp
     rebet_msgs
@@ -34,11 +34,11 @@ add_executable(sample_arborist src/sample_arborist_node.cpp)
 ament_target_dependencies(sample_arborist ${THIS_PACKAGE_DEPS})
 
 add_library(snore_plugin SHARED src/snore_pub.cpp)
-target_compile_definitions(snore_plugin PRIVATE  BT_PLUGIN_EXPORT )
+target_compile_definitions(snore_plugin PRIVATE  BT_PLUGIN_EXPORT)
 ament_target_dependencies(snore_plugin ${THIS_PACKAGE_DEPS})
 
 add_library(wake_plugin SHARED src/wake_pub.cpp)
-target_compile_definitions(wake_plugin PRIVATE  BT_PLUGIN_EXPORT )
+target_compile_definitions(wake_plugin PRIVATE  BT_PLUGIN_EXPORT)
 ament_target_dependencies(wake_plugin ${THIS_PACKAGE_DEPS})
 
 # Install Cpp executables
@@ -67,8 +67,7 @@ install(TARGETS
   wake_plugin
   LIBRARY DESTINATION share/${PROJECT_NAME}/bt_plugins
   ARCHIVE DESTINATION share/${PROJECT_NAME}/bt_plugins
-  RUNTIME DESTINATION share/${PROJECT_NAME}/bt_plugins
-  )
+  RUNTIME DESTINATION share/${PROJECT_NAME}/bt_plugins)
 
 install(DIRECTORY
   launch

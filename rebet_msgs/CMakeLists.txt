@@ -29,6 +29,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetAttributesInBlackboard.srv"
   "srv/SetParameterInBlackboard.srv"
   "srv/DetectObject.srv"
+  "srv/RegisterNewTree.srv"
+  "srv/GetContextVar.srv"
   "msg/ObjectsIdentified.msg"
   "msg/QR.msg"
   "msg/QRValue.msg"

@@ -62,13 +62,13 @@ rebet::to_string(const SystemAttributeValue & value)
     case SystemAttributeType::ATTRIBUTE_NOT_SET:
       return "not set";
     case SystemAttributeType::ATTRIBUTE_ODOM:
-        return "odom message inside :) ";
+      return "odom message inside :) ";
     case SystemAttributeType::ATTRIBUTE_DIAG:
-        return "diagnostic keyvalue message inside :) ";
+      return "diagnostic keyvalue message inside :) ";
     case SystemAttributeType::ATTRIBUTE_LASER:
-        return "laserscan message inside :) ";
+      return "laserscan message inside :) ";
     case SystemAttributeType::ATTRIBUTE_FLOAT:
-        return "float message inside :) ";
+      return "float message inside :) ";
     default:
       return "unknown type";
   }
@@ -90,7 +90,9 @@ SystemAttributeValue::SystemAttributeValue(const rebet_msgs::msg::SystemAttribut
     case ATTRIBUTE_NOT_SET:
       break;
     default:
-      throw std::runtime_error(std::string("Unknown type encountered when trying to construct SystemAttributeValue"));
+      throw std::runtime_error(
+              std::string(
+                "Unknown type encountered when trying to construct SystemAttributeValue"));
   }
 }
 

@@ -211,6 +211,95 @@ struct adl_serializer<sensor_msgs::msg::LaserScan>
   }
 };
 
+
+template<>
+struct adl_serializer<sensor_msgs::msg::Range>
+{
+  static void to_json(nlohmann::json & j, const sensor_msgs::msg::Range & range)
+  {
+    j = {
+      {"header", {
+          {"stamp", {
+              {"sec", range.header.stamp.sec},
+              {"nanosec", range.header.stamp.nanosec}
+            }},
+          {"frame_id", range.header.frame_id}
+        }},
+      {"radiation_type", range.radiation_type},
+      {"field_of_view", range.field_of_view},
+      {"min_range", range.min_range},
+      {"max_range", range.max_range},
+      {"range", range.range}
+    };
+  }
+
+  static void from_json(const nlohmann::json & j, sensor_msgs::msg::Range & range)
+  {
+    j.at("header").at("stamp").at("sec").get_to(range.header.stamp.sec);
+    j.at("header").at("stamp").at("nanosec").get_to(range.header.stamp.nanosec);
+    j.at("header").at("frame_id").get_to(range.header.frame_id);
+
+    j.at("radiation_type").get_to(range.radiation_type);
+    j.at("field_of_view").get_to(range.field_of_view);
+    j.at("min_range").get_to(range.min_range);
+    j.at("max_range").get_to(range.max_range);
+    j.at("range").get_to(range.range); 
+  }
+};
+
+template<>
+struct adl_serializer<sensor_msgs::msg::BatteryState>
+{
+  static void to_json(nlohmann::json & j, const sensor_msgs::msg::BatteryState & battery_state)
+  {
+    j = {
+      {"header", {
+          {"stamp", {
+              {"sec", battery_state.header.stamp.sec},
+              {"nanosec", battery_state.header.stamp.nanosec}
+            }},
+          {"frame_id", battery_state.header.frame_id}
+        }},
+      {"voltage", battery_state.voltage},
+      {"current", battery_state.current},
+      {"charge", battery_state.charge},
+      {"capacity", battery_state.capacity},
+      {"design_capacity", battery_state.design_capacity},
+      {"percentage", battery_state.percentage},
+      {"power_supply_status", battery_state.power_supply_status},
+      {"power_supply_health", battery_state.power_supply_health},
+      {"power_supply_technology", battery_state.power_supply_technology},
+      {"present", battery_state.present},
+      {"cell_voltage", battery_state.cell_voltage},
+      {"cell_temperature", battery_state.cell_temperature},
+      {"location", battery_state.location},
+      {"serial_number", battery_state.serial_number}
+    };
+  }
+
+  static void from_json(const nlohmann::json & j, sensor_msgs::msg::BatteryState & battery_state)
+  {
+    j.at("header").at("stamp").at("sec").get_to(battery_state.header.stamp.sec);
+    j.at("header").at("stamp").at("nanosec").get_to(battery_state.header.stamp.nanosec);
+    j.at("header").at("frame_id").get_to(battery_state.header.frame_id);
+
+    j.at("voltage").get_to(battery_state.voltage);
+    j.at("current").get_to(battery_state.current);
+    j.at("charge").get_to(battery_state.charge);
+    j.at("capacity").get_to(battery_state.capacity);
+    j.at("design_capacity").get_to(battery_state.design_capacity);
+    j.at("percentage").get_to(battery_state.percentage);
+    j.at("power_supply_status").get_to(battery_state.power_supply_status);
+    j.at("power_supply_health").get_to(battery_state.power_supply_health);
+    j.at("power_supply_technology").get_to(battery_state.power_supply_technology);
+    j.at("present").get_to(battery_state.present);
+    j.at("cell_voltage").get_to(battery_state.cell_voltage);  
+    j.at("cell_temperature").get_to(battery_state.cell_temperature);
+    j.at("location").get_to(battery_state.location);
+    j.at("serial_number").get_to(battery_state.serial_number);
+  }
+};
+
 template<>
 struct adl_serializer<diagnostic_msgs::msg::KeyValue>
 {
@@ -281,6 +370,23 @@ struct adl_serializer<rebet::SystemAttributeValue>
             }}
         };
         break;
+      
+        case rebet::SystemAttributeType::ATTRIBUTE_RANGE:
+        j = {
+          {"system_attribute_value", {
+              {"range_message", sys_attr_val.to_value_msg().range_value},
+              {"message_type", message_type}
+            }}
+        };
+        break;
+      case rebet::SystemAttributeType::ATTRIBUTE_BATTERY:
+        j = {
+          {"system_attribute_value", {
+              {"battery_message", sys_attr_val.to_value_msg().battery_value},
+              {"message_type", message_type}
+            }}
+        };
+        break;
 
       default:
         j = {
@@ -318,6 +424,22 @@ struct adl_serializer<rebet::SystemAttributeValue>
           j.at("system_attribute_value").at(
             "float_message").get<std_msgs::msg::Float32>());
         break;
+      case rebet::SystemAttributeType::ATTRIBUTE_NOT_SET:
+        sys_attr_val = rebet::SystemAttributeValue();
+        break;
+      case rebet::SystemAttributeType::ATTRIBUTE_RANGE:
+        sys_attr_val = rebet::SystemAttributeValue(
+          j.at("system_attribute_value").at(
+            "range_message").get<sensor_msgs::msg::Range>());
+        break;
+      case rebet::SystemAttributeType::ATTRIBUTE_BATTERY:
+        sys_attr_val = rebet::SystemAttributeValue(
+          j.at("system_attribute_value").at(
+            "battery_message").get<sensor_msgs::msg::BatteryState>());
+        break;
+      default:
+        throw std::runtime_error(
+          "Unknown type encountered when trying to deserialize SystemAttributeValue");  
     }
   }
 };
@@ -381,6 +503,9 @@ struct SerializerRegistration
     BT::RegisterJsonDefinition<std_msgs::msg::String>();
     BT::RegisterJsonDefinition<std_msgs::msg::Bool>();
     BT::RegisterJsonDefinition<sensor_msgs::msg::LaserScan>();
+    BT::RegisterJsonDefinition<sensor_msgs::msg::Range>();
+    BT::RegisterJsonDefinition<sensor_msgs::msg::BatteryState>();
+    BT::RegisterJsonDefinition<diagnostic_msgs::msg::KeyValue>();
     BT::RegisterJsonDefinition<rebet::SystemAttributeValue>();
     BT::RegisterJsonDefinition<rebet_msgs::msg::QR>();
     BT::RegisterJsonDefinition<std::vector<rebet_msgs::msg::QR>>();

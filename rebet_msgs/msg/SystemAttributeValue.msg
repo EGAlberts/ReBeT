@@ -26,3 +26,7 @@ diagnostic_msgs/KeyValue diag_value
 sensor_msgs/LaserScan laser_value
 
 std_msgs/Float32 float_value
+
+sensor_msgs/Range range_value
+
+sensor_msgs/BatteryState battery_value

@@ -20,6 +20,10 @@ rebet::to_string(const SystemAttributeType type)
       return "laserscan attribute msg";
     case SystemAttributeType::ATTRIBUTE_FLOAT:
       return "float attribute msg";
+    case SystemAttributeType::ATTRIBUTE_RANGE:
+      return "range attribute msg";
+    case SystemAttributeType::ATTRIBUTE_BATTERY:
+      return "battery attribute msg";
     default:
       return "unknown type";
   }
@@ -69,6 +73,10 @@ rebet::to_string(const SystemAttributeValue & value)
       return "laserscan message inside :) ";
     case SystemAttributeType::ATTRIBUTE_FLOAT:
       return "float message inside :) ";
+    case SystemAttributeType::ATTRIBUTE_RANGE:
+      return "range message inside";
+    case SystemAttributeType::ATTRIBUTE_BATTERY:
+      return "battery message inside";
     default:
       return "unknown type";
   }
@@ -83,10 +91,12 @@ SystemAttributeValue::SystemAttributeValue(const rebet_msgs::msg::SystemAttribut
 {
   value_ = value;
   switch (value.type) {
-    case ATTRIBUTE_ODOM:
-    case ATTRIBUTE_DIAG:
-    case ATTRIBUTE_LASER:
-    case ATTRIBUTE_FLOAT:
+    case ATTRIBUTE_ODOM: break;
+    case ATTRIBUTE_DIAG: break;
+    case ATTRIBUTE_LASER: break;
+    case ATTRIBUTE_FLOAT: break;
+    case ATTRIBUTE_RANGE: break;
+    case ATTRIBUTE_BATTERY: break;
     case ATTRIBUTE_NOT_SET:
       break;
     default:
@@ -118,6 +128,18 @@ SystemAttributeValue::SystemAttributeValue(const std_msgs::msg::Float32 float_va
 {
   value_.float_value = float_value;
   value_.type = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_FLOAT;
+}
+
+SystemAttributeValue::SystemAttributeValue(const sensor_msgs::msg::Range range_value)
+{
+  value_.range_value = range_value;
+  value_.type = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_RANGE;
+}
+
+SystemAttributeValue::SystemAttributeValue(const sensor_msgs::msg::BatteryState battery_value)
+{
+  value_.battery_value = battery_value;
+  value_.type = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_BATTERY;
 }
 
 SystemAttributeType

@@ -23,6 +23,8 @@
 
 #include <fstream>
 #include <iostream>
+#include <algorithm>
+#include <nlohmann/json.hpp>
 #include <behaviortree_ros2/tree_execution_server.hpp>
 
 using namespace BT;
@@ -79,6 +81,41 @@ public:
   }
 
 protected:
+
+  void summarize_laserscan_json(nlohmann::json& j)
+{
+  // Recursively search for LaserScan-like objects
+  if (j.is_object()) {
+    for (auto& el : j.items()) {
+      if (el.value().is_object()) {
+        auto& obj = el.value();
+        if (obj.contains("ranges") && obj["ranges"].is_array()) {
+          size_t n = obj["ranges"].size();
+          // Show only first 3 and last 3 values
+          nlohmann::json short_ranges = nlohmann::json::array();
+          for (size_t i = 0; i < std::min(n, size_t(3)); ++i)
+            short_ranges.push_back(obj["ranges"][i]);
+          if (n > 6) short_ranges.push_back("...");
+          for (size_t i = (n > 6 ? n-3 : 3); i < n; ++i)
+            short_ranges.push_back(obj["ranges"][i]);
+          obj["ranges"] = { {"size", n}, {"sample", short_ranges} };
+        }
+        if (obj.contains("intensities") && obj["intensities"].is_array()) {
+          size_t n = obj["intensities"].size();
+          nlohmann::json short_intensities = nlohmann::json::array();
+          for (size_t i = 0; i < std::min(n, size_t(3)); ++i)
+            short_intensities.push_back(obj["intensities"][i]);
+          if (n > 6) short_intensities.push_back("...");
+          for (size_t i = (n > 6 ? n-3 : 3); i < n; ++i)
+            short_intensities.push_back(obj["intensities"][i]);
+          obj["intensities"] = { {"size", n}, {"sample", short_intensities} };
+        }
+        summarize_laserscan_json(obj); // Recurse
+      }
+    }
+  }
+}
+
 
   void handle_set_atb_bb(
     const std::shared_ptr<SetAttributesInBlackboard::Request> request,

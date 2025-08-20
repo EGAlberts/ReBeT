@@ -16,7 +16,7 @@ namespace BT
  * @brief The QRNode is used to specify quality requirements which may influence the behavior of the nodes it decorates..
  */
 
-enum class QualityAttribute {Power, Safety, TaskEfficiency, MovementEfficiency, Test};
+enum class QualityAttribute {Performance, Power, Safety, TaskEfficiency, MovementEfficiency, Test, None};
 
 class QRNode : public DecoratorNode
 {
@@ -24,8 +24,6 @@ public:
   QRNode(const std::string & name, const NodeConfig & config, QualityAttribute quality_attribute)
   : DecoratorNode(name, config)
   {
-    node_ = rclcpp::Node::make_shared("tempqrnode" + name);
-    publisher_ = node_->create_publisher<std_msgs::msg::Float32>(name, 10);
     _quality_attribute = quality_attribute;
     _average_metric = 0.0;
     _times_calculated = 0;
@@ -103,8 +101,6 @@ private:
   }
 
 protected:
-  std::shared_ptr<rclcpp::Node> node_;
-  rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr publisher_;
   QualityAttribute _quality_attribute;
   int _times_calculated;
   double _average_metric;
@@ -122,9 +118,6 @@ protected:
   void output_metric()
   {
     setOutput(METRIC, _metric);
-    auto message = std_msgs::msg::Float32();
-    message.data = _metric;
-    publisher_->publish(message);
     _times_calculated++;
   }
 

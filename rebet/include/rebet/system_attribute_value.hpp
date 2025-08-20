@@ -29,6 +29,8 @@ enum SystemAttributeType : uint8_t
   ATTRIBUTE_DIAG    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_DIAG,
   ATTRIBUTE_LASER    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_LASER,
   ATTRIBUTE_FLOAT    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_FLOAT,
+  ATTRIBUTE_RANGE    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_RANGE,
+  ATTRIBUTE_BATTERY    = rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_BATTERY,
 };
 
 /// Return the name of a parameter type
@@ -69,6 +71,12 @@ public:
   explicit SystemAttributeValue(const sensor_msgs::msg::LaserScan laser_value);
 
   explicit SystemAttributeValue(const std_msgs::msg::Float32 float_value);
+
+  explicit SystemAttributeValue(const sensor_msgs::msg::Range range_value);
+  
+  explicit SystemAttributeValue(const sensor_msgs::msg::BatteryState battery_value);
+
+
 
 
   /// Return an enum indicating the type of the set value.
@@ -139,6 +147,30 @@ public:
       throw SystemAttributeTypeException(SystemAttributeType::ATTRIBUTE_FLOAT, get_type());
     }
     return value_.float_value;
+  }
+
+  template<SystemAttributeType type>
+  constexpr
+  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_RANGE,
+    const sensor_msgs::msg::Range &>::type
+  get() const
+  {
+    if (value_.type != rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_RANGE) {
+      throw SystemAttributeTypeException(SystemAttributeType::ATTRIBUTE_RANGE, get_type());
+    }
+    return value_.range_value;
+  }
+
+  template<SystemAttributeType type>
+  constexpr
+  typename std::enable_if<type == SystemAttributeType::ATTRIBUTE_BATTERY,
+    const sensor_msgs::msg::BatteryState &>::type
+  get() const
+  {
+    if (value_.type != rebet_msgs::msg::SystemAttributeType::ATTRIBUTE_BATTERY) {
+      throw SystemAttributeTypeException(SystemAttributeType::ATTRIBUTE_BATTERY, get_type());
+    }
+    return value_.battery_value;
   }
 
 private:

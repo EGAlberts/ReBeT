@@ -23,6 +23,8 @@
 
 #include <fstream>
 #include <iostream>
+#include <algorithm>
+#include <nlohmann/json.hpp>
 #include <behaviortree_ros2/tree_execution_server.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
@@ -80,34 +82,41 @@ public:
   }
 
 protected:
-  // bool inject_script_node(std::string script)
-  // {
-  //   std::string _script;
-  //   ScriptFunction _executor;
 
-  //   auto executor = ParseScript(script);
-  //   if (!executor)
-  //   {
-  //     return false;
+  void summarize_laserscan_json(nlohmann::json& j)
+{
+  // Recursively search for LaserScan-like objects
+  if (j.is_object()) {
+    for (auto& el : j.items()) {
+      if (el.value().is_object()) {
+        auto& obj = el.value();
+        if (obj.contains("ranges") && obj["ranges"].is_array()) {
+          size_t n = obj["ranges"].size();
+          // Show only first 3 and last 3 values
+          nlohmann::json short_ranges = nlohmann::json::array();
+          for (size_t i = 0; i < std::min(n, size_t(3)); ++i)
+            short_ranges.push_back(obj["ranges"][i]);
+          if (n > 6) short_ranges.push_back("...");
+          for (size_t i = (n > 6 ? n-3 : 3); i < n; ++i)
+            short_ranges.push_back(obj["ranges"][i]);
+          obj["ranges"] = { {"size", n}, {"sample", short_ranges} };
+        }
+        if (obj.contains("intensities") && obj["intensities"].is_array()) {
+          size_t n = obj["intensities"].size();
+          nlohmann::json short_intensities = nlohmann::json::array();
+          for (size_t i = 0; i < std::min(n, size_t(3)); ++i)
+            short_intensities.push_back(obj["intensities"][i]);
+          if (n > 6) short_intensities.push_back("...");
+          for (size_t i = (n > 6 ? n-3 : 3); i < n; ++i)
+            short_intensities.push_back(obj["intensities"][i]);
+          obj["intensities"] = { {"size", n}, {"sample", short_intensities} };
+        }
+        summarize_laserscan_json(obj); // Recurse
+      }
+    }
+  }
+}
 
-  //     throw RuntimeError(executor.error());
-
-  //   }
-  //   else
-  //   {
-  //     _executor = executor.value();
-  //     _script = script;
-  //   }
-
-  //   if (_executor)
-  //   {
-  //     Ast::Environment env = {tree.rootBlackboard(), nullptr};
-  //     _executor(env);
-  //   }
-
-  //   return true;
-
-  // }
 
   void handle_set_atb_bb(
     const std::shared_ptr<SetAttributesInBlackboard::Request> request,
@@ -115,7 +124,31 @@ protected:
   {
     for (auto const & sys_attr : request->sys_attributes) {
       auto sys_attvalue_obj = rebet::SystemAttributeValue(sys_attr.value);
-      globalBlackboard()->set(sys_attr.name, sys_attvalue_obj);
+
+      switch(sys_attvalue_obj.get_type()) {
+        case rebet::SystemAttributeType::ATTRIBUTE_NOT_SET:
+          response->success = false;
+          throw std::runtime_error("System attribute meant for blackboard did not have value set");
+          break;
+        case rebet::SystemAttributeType::ATTRIBUTE_ODOM:
+          globalBlackboard()->set(sys_attr.name, sys_attvalue_obj.get<rebet::SystemAttributeType::ATTRIBUTE_ODOM>());
+          break;
+        case rebet::SystemAttributeType::ATTRIBUTE_DIAG:
+          globalBlackboard()->set(sys_attr.name, sys_attvalue_obj.get<rebet::SystemAttributeType::ATTRIBUTE_DIAG>());
+          break;
+        case rebet::SystemAttributeType::ATTRIBUTE_LASER:
+          globalBlackboard()->set(sys_attr.name, sys_attvalue_obj.get<rebet::SystemAttributeType::ATTRIBUTE_LASER>());
+          break;
+        case rebet::SystemAttributeType::ATTRIBUTE_FLOAT:
+          globalBlackboard()->set(sys_attr.name, sys_attvalue_obj.get<rebet::SystemAttributeType::ATTRIBUTE_FLOAT>().data);
+          break;
+        case rebet::SystemAttributeType::ATTRIBUTE_RANGE:
+          globalBlackboard()->set(sys_attr.name, sys_attvalue_obj.get<rebet::SystemAttributeType::ATTRIBUTE_RANGE>());
+          break;
+        case rebet::SystemAttributeType::ATTRIBUTE_BATTERY:
+          globalBlackboard()->set(sys_attr.name, sys_attvalue_obj.get<rebet::SystemAttributeType::ATTRIBUTE_BATTERY>());
+          break;
+      }
     }
     response->success = true;
   }
@@ -140,8 +173,6 @@ protected:
     const std::shared_ptr<SetParameterInBlackboard::Request> request,
     std::shared_ptr<SetParameterInBlackboard::Response> response)
   {
-    // RCLCPP_INFO(node()->get_logger(), "Set Parameter Service Called in Arborist Node");
-
     for (auto const & ros_parameter : request->ros_parameters) {
       auto ros_param_value_obj = rclcpp::ParameterValue(ros_parameter.value);
 
@@ -238,49 +269,6 @@ protected:
     return qr_msgs;
   }
 
-  // template <class QR_TYPE>
-  // bool set_weights_of_qrs(std::vector<QR_MSG> qr_msgs, std::vector<QR_TYPE*> qr_nodes)
-  // {
-  //   std::string script = "";
-  // for (QR_MSG & qr_msg : qr_msgs)
-  //   {
-  //     std::string qr_name = qr_msg.qr_name;
-
-  //     for (auto & node : qr_nodes)
-  //     {
-  //       if(qr_name == node->registrationName())
-  //       {
-  //         auto node_config = node->config();
-
-  //         auto weight = node_config.input_ports.find(QRNode::WEIGHT);
-
-  //         if (weight == node_config.input_ports.end())
-  //         {
-  //           std::cout << "weight not found" << std::endl;
-  //           return false;
-  //         }
-
-  //         std::string weight_bb_key = (std::string)TreeNode::stripBlackboardPointer(weight->second);
-
-  //         script += weight_bb_key;
-  //         script += ":=";
-  //         script += std::to_string(qr_msg.weight);
-  //         script += "; ";
-  //       }
-
-  //     }
-
-  //   } TODO: Restore, config() is now protected.
-
-  //     script.pop_back();
-  //     script.pop_back(); //Removing the last '; ' as it isn't necessary.
-
-  //     return false; //TODO: RESTORE THIS FUNCTIONALITY
-  //     //return inject_script_node(script);
-
-  // }
-
-
   void handle_get_qr(
     const std::shared_ptr<GetQR::Request> request,
     std::shared_ptr<GetQR::Response> response)
@@ -322,23 +310,6 @@ protected:
     }
 
   }
-
-
-  // void handle_set_weights(const std::shared_ptr<SetWeights::Request> request,
-  //       std::shared_ptr<SetWeights::Response> response)
-  // {
-  //   std::vector<SystemLevelQR*> sys_qr_nodes;
-  //   std::vector<TaskLevelQR*> task_qr_nodes;
-
-  //   sys_qr_nodes = get_tree_qrs<SystemLevelQR>();
-
-  //   task_qr_nodes = get_tree_qrs<TaskLevelQR>();
-
-  //   std::vector<rebet_msgs::msg::QR> qr_msgs = request->qrs_to_update;
-
-  //   response->success = (set_weights_of_qrs<SystemLevelQR>(qr_msgs,sys_qr_nodes) && set_weights_of_qrs<TaskLevelQR>(qr_msgs,task_qr_nodes));
-
-  // }
 
   rclcpp::Service<GetBlackboard>::SharedPtr _get_blackboard;
   rclcpp::Service<GetQR>::SharedPtr _get_qr;

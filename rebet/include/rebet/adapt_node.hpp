@@ -169,8 +169,8 @@ protected:
 
   static constexpr const char * ADAP_OPT = "adaptation_options";
   static constexpr const char * ADAP_STRAT = "adaptation_strategy";
-  static constexpr const char * ADAP_SUB = "adaptation_subject";
-  static constexpr const char * ADAP_LOC = "subject_location";
+  static constexpr const char * ADAP_SUB = "parameter_name";
+  static constexpr const char * ADAP_LOC = "ros_node_name";
 
   double evaluate_adaptation(aal_msgs::msg::Adaptation given_adaptation)
   {
@@ -863,8 +863,6 @@ public:
     AdaptationType adaptation_type)
   : AdaptOnCondition<ParamT>(name, config)
   {
-    std::cout << "\n\n\n\nSomeone created me a AdaptOnConditionOnRunning node!!!!\n\n\n\n\n" <<
-      std::endl;
     adaptation_target_ = adaptation_target;
     adaptation_type_ = adaptation_type;
 
@@ -904,8 +902,6 @@ public:
       }
 
       if (_to_adapt && !request_sent_) {
-        std::cout << "condition met but no request sent" << std::endl;
-
         std::string strategy_name;
         this->getInput(ADAP_STRAT, strategy_name);
 

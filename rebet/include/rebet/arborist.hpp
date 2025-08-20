@@ -24,6 +24,7 @@
 #include <fstream>
 #include <iostream>
 #include <behaviortree_ros2/tree_execution_server.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 using namespace BT;
 using std::placeholders::_1;

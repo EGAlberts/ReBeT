@@ -3,8 +3,10 @@
 #include "behaviortree_cpp/decorator_node.h"
 #include "behaviortree_cpp/leaf_node.h"
 #include "behaviortree_cpp/behavior_tree.h"
+#include "behaviortree_cpp/action_node.h"
 
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp/duration.hpp"
 
 #include "aal_msgs/srv/adapt_architecture_external.hpp"
 #include "aal_msgs/srv/adapt_architecture.hpp"
@@ -18,6 +20,7 @@
 #include "rebet/system_attribute_value.hpp"
 #include "rebet/rebet_utilities.hpp"
 #include "aal_msgs/msg/adaptation.hpp"
+#include "aal_msgs/msg/action_node_description.hpp"
 #include "aal_msgs/msg/adaptation_options.hpp"
 #include "rcl_interfaces/msg/parameter_value.hpp"
 #include "lifecycle_msgs/msg/transition.hpp"
@@ -41,7 +44,7 @@ template<>
 [[nodiscard]] AdaptationType convertFromString<AdaptationType>(StringView str);
 
 template<>
-[[nodiscard]] std::string toStr<BT::AdaptationType>(const BT::AdaptationType & direction);
+[[nodiscard]] std::string toStr<BT::AdaptationType>(const BT::AdaptationType & type);
 
 template<>
 AdaptationType convertFromString<AdaptationType>(StringView str)
@@ -76,6 +79,52 @@ std::string toStr<AdaptationType>(const AdaptationType & type)
   }
 }
 
+template<>
+[[nodiscard]] std::string toStr(const std::chrono::nanoseconds& duration);
+
+template<>
+[[nodiscard]] std::chrono::nanoseconds convertFromString<std::chrono::nanoseconds>(StringView str);
+
+template<>
+std::chrono::nanoseconds convertFromString(StringView str)
+{
+    std::string number = std::string(str.substr(0, str.length()-2));
+    int64_t value = std::stoll(number);
+    std::string unit = std::string(str.substr(str.length()-2));
+
+    if (unit == "ns") return std::chrono::nanoseconds(value);
+    if (unit == "ms") return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::nanoseconds(value));
+    if (unit == "s")  return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(value));
+    if (unit == "in") return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::minutes(value));
+
+      throw RuntimeError(
+          std::string("Cannot convert this to duration: ") +
+          static_cast<std::string>(str));
+}
+
+template<>
+std::string toStr(const std::chrono::nanoseconds& duration)
+{
+    auto ns = duration;
+    auto ms = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
+    auto s = std::chrono::duration_cast<std::chrono::seconds>(duration);
+    auto min = std::chrono::duration_cast<std::chrono::minutes>(duration);
+
+    if (ns.count() < 1000) {
+        return std::to_string(ns.count()) + "ns";
+    } else if (ms.count() < 1000) {
+        return std::to_string(ms.count()) + "ms";
+    } else if (s.count() < 60) {
+        return std::to_string(s.count()) + "s";
+    } else {
+        return std::to_string(min.count()) + "min";
+    }
+}
+
+
+
+
+
 std::ostream & operator<<(std::ostream & os, const AdaptationType & type)
 {
   os << toStr(type);
@@ -94,6 +143,9 @@ protected:
   rclcpp::CallbackGroup::SharedPtr callback_group_;
   std::vector<aal_msgs::msg::Adaptation> _internal_adaptations;
   std::vector<std::string> _decorated_leaves_description = {};
+  std::string child_registration_name_;
+  std::string child_action_name_;
+  std::chrono::nanoseconds period_ = std::chrono::nanoseconds(0);
   std::shared_future<aal_msgs::srv::AdaptArchitectureExternal::Response::SharedPtr>
   external_future_response_;
   std::shared_future<aal_msgs::srv::AdaptArchitecture::Response::SharedPtr>
@@ -175,7 +227,13 @@ protected:
     } else if constexpr (std::is_same_v<AdaptationService,
       aal_msgs::srv::AdaptArchitectureTactical>)
     {
-      request->child_description = _decorated_leaves_description;
+
+      aal_msgs::msg::ActionNodeDescription action_description;
+      action_description.registration_name = child_registration_name_;
+      action_description.action_name = child_action_name_;
+      request->period = rclcpp::Duration(period_);
+
+      request->child_description = action_description;
       tactical_future_response_ = client->async_send_request(request).share();
     }
   }
@@ -304,7 +362,10 @@ protected:
     auto node_visitor = [this](TreeNode * node)
       {
         if (auto leafiest_node = dynamic_cast<LeafNode *>(node)) {
-          _decorated_leaves_description.push_back(leafiest_node->registrationName());
+          child_registration_name_ = leafiest_node->registrationName();
+          if (auto action_leaf_node = dynamic_cast<ActionNodeBase *>(leafiest_node)) {
+            action_leaf_node->getInput("action_name", child_action_name_);
+          }
         }
       };
 
@@ -324,8 +385,8 @@ public:
     std::cout << "\n\n\n\nSomeone created me a AdaptOnConditionAny node!!!!\n\n\n\n\n" << std::endl;
     std::cout << "Got here created me a AdaptOnConditionAny node!!!!" << std::endl;
     auto curr_time_pointer = std::chrono::system_clock::now();
-    window_start_ = std::chrono::duration_cast<std::chrono::seconds>(
-      curr_time_pointer.time_since_epoch()).count();
+    window_start_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      curr_time_pointer.time_since_epoch());
   }
 
   static PortsList providedPorts()
@@ -338,8 +399,8 @@ public:
       InputPort<AdaptationType>(
         "adaptation_type",
         "whether to do an internal, external, or tactical adaptation"),
-      InputPort<int>("period",
-                        "seconds to wait between sending adaptation requests")
+      InputPort<std::chrono::nanoseconds>("period",
+                        "The number of (ns/ms/s/min) to wait between sending adaptation requests e.g. 5s")
     };
     child_ports.merge(base_ports);
 
@@ -349,12 +410,11 @@ public:
   bool period_elapsed() {
     auto period_res = getInput("period", period_);
     if (period_res) {
-      auto curr_time_pointer = std::chrono::system_clock::now();
-      int current_time = std::chrono::duration_cast<std::chrono::seconds>(
-        curr_time_pointer.time_since_epoch()).count();
-      int elapsed_seconds = current_time - window_start_;
+      auto current_time = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::system_clock::now().time_since_epoch());
+      auto elapsed = current_time - window_start_;
 
-      bool window_expired = elapsed_seconds >= period_;
+      bool window_expired = elapsed >= period_;
 
       if (window_expired) {
         window_start_ = current_time;
@@ -552,8 +612,7 @@ protected:
   bool request_sent_ = false;
   NodeStatus chosen_child_status_;
   AdaptationType input_adaptation_type_;
-  int period_;
-  int window_start_;
+  std::chrono::nanoseconds window_start_;
   rclcpp::executors::SingleThreadedExecutor callback_group_executor_;
 
 

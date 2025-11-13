@@ -9,6 +9,7 @@
 #include <ctime>
 #include "rebet/system_attribute_value.hpp"
 #include "std_msgs/msg/float32.hpp"
+#include <boost/tokenizer.hpp>
 
 namespace BT
 {
@@ -142,6 +143,36 @@ public:
   : QRNode(name, config, quality_attribute)
   {
   }
+
+};
+
+class RELAXQR : public QRNode
+{
+  public:
+    RELAXQR(
+      const std::string & name, const NodeConfig & config)
+    : QRNode(name, config, QualityAttribute::TaskEfficiency)
+    {
+    }
+
+  static PortsList providedPorts()
+  {
+    return {InputPort<std::string>(
+        REQUIREMENT,
+        "DSL entry specifying the RELAXed requirement"),
+      OutputPort<double>(METRIC, "To what extent is this property fulfilled"),
+      OutputPort<double>(MEAN_METRIC, "To what extent is this property fulfilled on average"),
+      OutputPort<std::string>(QR_STATUS, "Information as to the state the QR is currently in."),
+    };
+  }
+
+  void calculate_measure() override
+  {
+  }
+
+
+
+  static constexpr const char * REQUIREMENT = "requirement";
 
 };
 

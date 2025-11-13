@@ -247,6 +247,13 @@ protected:
     return qr_nodes;
   }
 
+  void place_in_all_bbs(std::string key, std::vector<std::string> value)
+  {
+    for (auto const & sbtree : tree().subtrees) {
+      sbtree->blackboard->set(key, value);
+    }
+  }
+
   template<class QR_TYPE>
   std::vector<QR_MSG> create_qr_msgs(std::vector<QR_TYPE *> qr_nodes)
   {

@@ -145,6 +145,7 @@ protected:
   std::vector<std::string> _decorated_leaves_description = {};
   std::string child_registration_name_;
   std::string child_action_name_;
+  std::vector<std::string> _requirements_in_effect;
   std::chrono::nanoseconds period_ = std::chrono::nanoseconds(0);
   std::shared_future<aal_msgs::srv::AdaptArchitectureExternal::Response::SharedPtr>
   external_future_response_;
@@ -232,6 +233,7 @@ protected:
       action_description.registration_name = child_registration_name_;
       action_description.action_name = child_action_name_;
       request->period = rclcpp::Duration(period_);
+      request->requirements = _requirements_in_effect;
 
       request->child_description = action_description;
       tactical_future_response_ = client->async_send_request(request).share();
@@ -500,6 +502,21 @@ public:
     // GetInput is not allowed in the constructor due to this issue: https://github.com/BehaviorTree/BehaviorTree.CPP/issues/948
     auto type_res = getInput("adaptation_type", input_adaptation_type_);
     auto child_res = getInput("child_status", chosen_child_status_);
+
+    auto effect_res = config().blackboard->get<std::vector<std::string>>("QRS_IN_EFFECT", _requirements_in_effect);
+
+    if(effect_res)
+    {
+      std::cout << "AdaptOnConditionAny got requirements in effect: ";
+      for (const auto & req : _requirements_in_effect) {
+        std::cout << req << ", ";
+      }
+      std::cout << std::endl;
+    }
+    else
+    {
+      std::cout << "AdaptOnConditionAny could not get requirements in effect from blackboard." << std::endl;
+    }
     // std::cout << "tick" << std::endl;
     // OnStart
     switch (this->status()) {

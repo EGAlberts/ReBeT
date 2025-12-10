@@ -37,7 +37,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SystemAttributeValue.msg"
   "msg/SystemAttributeType.msg"
   "msg/SystemAttribute.msg"
-
+  "msg/Measure.msg"
+  "msg/Measures.msg"
   DEPENDENCIES builtin_interfaces geometry_msgs nav_msgs rcl_interfaces diagnostic_msgs lifecycle_msgs sensor_msgs
 )
 if(BUILD_TESTING)

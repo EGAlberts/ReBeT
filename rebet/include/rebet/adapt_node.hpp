@@ -88,18 +88,59 @@ template<>
 template<>
 std::chrono::nanoseconds convertFromString(StringView str)
 {
-    std::string number = std::string(str.substr(0, str.length()-2));
-    int64_t value = std::stoll(number);
-    std::string unit = std::string(str.substr(str.length()-2));
+    std::string s(static_cast<std::string>(str));
+
+    // trim whitespace
+    auto first = s.find_first_not_of(" \t\n\r");
+    if (first == std::string::npos) {
+      throw RuntimeError(std::string("Cannot convert empty string to duration: ") + s);
+    }
+    s = s.substr(first);
+    auto last = s.find_last_not_of(" \t\n\r");
+    if (last != std::string::npos) s = s.substr(0, last + 1);
+
+    std::string unit;
+    std::string number;
+
+    // check longest units first
+    if (s.size() >= 3 && s.rfind("min") == s.size() - 3) {
+      unit = "min";
+      number = s.substr(0, s.size() - 3);
+    } else if (s.size() >= 2 && s.rfind("ns") == s.size() - 2) {
+      unit = "ns";
+      number = s.substr(0, s.size() - 2);
+    } else if (s.size() >= 2 && s.rfind("ms") == s.size() - 2) {
+      unit = "ms";
+      number = s.substr(0, s.size() - 2);
+    } else if (s.size() >= 1 && s.rfind("s") == s.size() - 1) {
+      unit = "s";
+      number = s.substr(0, s.size() - 1);
+    } else {
+      throw RuntimeError(std::string("Cannot convert this to duration: ") + s);
+    }
+
+    // trim number
+    auto nf = number.find_first_not_of(" \t\n\r");
+    if (nf == std::string::npos) {
+      throw RuntimeError(std::string("No numeric value in duration string: ") + s);
+    }
+    number = number.substr(nf);
+    auto nl = number.find_last_not_of(" \t\n\r");
+    if (nl != std::string::npos) number = number.substr(0, nl + 1);
+
+    int64_t value = 0;
+    try {
+      value = std::stoll(number);
+    } catch (const std::exception & e) {
+      throw RuntimeError(std::string("Invalid numeric value in duration: ") + number);
+    }
 
     if (unit == "ns") return std::chrono::nanoseconds(value);
-    if (unit == "ms") return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::nanoseconds(value));
+    if (unit == "ms") return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(value));
     if (unit == "s")  return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(value));
-    if (unit == "in") return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::minutes(value));
+    if (unit == "min") return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::minutes(value));
 
-      throw RuntimeError(
-          std::string("Cannot convert this to duration: ") +
-          static_cast<std::string>(str));
+    throw RuntimeError(std::string("Cannot convert this to duration: ") + s);
 }
 
 template<>
@@ -145,6 +186,7 @@ protected:
   std::vector<std::string> _decorated_leaves_description = {};
   std::string child_registration_name_;
   std::string child_action_name_;
+  u_int8_t child_action_kind_;
   std::vector<std::string> _requirements_in_effect;
   std::chrono::nanoseconds period_ = std::chrono::nanoseconds(0);
   std::shared_future<aal_msgs::srv::AdaptArchitectureExternal::Response::SharedPtr>
@@ -231,7 +273,8 @@ protected:
 
       aal_msgs::msg::ActionNodeDescription action_description;
       action_description.registration_name = child_registration_name_;
-      action_description.action_name = child_action_name_;
+      action_description.interface_name = child_action_name_;
+      action_description.interface_kind = child_action_kind_;
       request->period = rclcpp::Duration(period_);
       request->requirements = _requirements_in_effect;
 
@@ -244,7 +287,7 @@ protected:
   bool receiveAdaptationRequest(const rclcpp::FutureReturnCode & ret)
   {
 
-    auto const timeout = rclcpp::Duration::from_seconds(double(service_timeout_.count()) / 1000);
+    auto const timeout = rclcpp::Duration::from_seconds(double(service_timeout_.count()*4) / 1000);
 
     if (ret != rclcpp::FutureReturnCode::SUCCESS) {
       if ( (node_->now() - time_request_sent_) > timeout) {
@@ -366,7 +409,22 @@ protected:
         if (auto leafiest_node = dynamic_cast<LeafNode *>(node)) {
           child_registration_name_ = leafiest_node->registrationName();
           if (auto action_leaf_node = dynamic_cast<ActionNodeBase *>(leafiest_node)) {
-            action_leaf_node->getInput("action_name", child_action_name_);
+            if(action_leaf_node->getInput("action_name", child_action_name_))
+            {
+              child_action_kind_ = aal_msgs::msg::ActionNodeDescription::ACTION_CLIENT;
+              return;
+            }
+            if(action_leaf_node->getInput("service_name", child_action_name_))
+            {
+              child_action_kind_ = aal_msgs::msg::ActionNodeDescription::SERVICE_CLIENT;
+              return;
+            }
+            if(action_leaf_node->getInput("topic_name", child_action_name_))
+            {
+              child_action_kind_ = aal_msgs::msg::ActionNodeDescription::PUBLISHER;
+              return;
+            }
+            
           }
         }
       };
@@ -505,18 +563,18 @@ public:
 
     auto effect_res = config().blackboard->get<std::vector<std::string>>("QRS_IN_EFFECT", _requirements_in_effect);
 
-    if(effect_res)
-    {
-      std::cout << "AdaptOnConditionAny got requirements in effect: ";
-      for (const auto & req : _requirements_in_effect) {
-        std::cout << req << ", ";
-      }
-      std::cout << std::endl;
-    }
-    else
-    {
-      std::cout << "AdaptOnConditionAny could not get requirements in effect from blackboard." << std::endl;
-    }
+    // if(effect_res)
+    // {
+    //   std::cout << "AdaptOnConditionAny got requirements in effect: ";
+    //   for (const auto & req : _requirements_in_effect) {
+    //     std::cout << req << ", ";
+    //   }
+    //   std::cout << std::endl;
+    // }
+    // else
+    // {
+    //   std::cout << "AdaptOnConditionAny could not get requirements in effect from blackboard." << std::endl;
+    // }
     // std::cout << "tick" << std::endl;
     // OnStart
     switch (this->status()) {
@@ -542,7 +600,7 @@ public:
       case NodeStatus::RUNNING:
 
         if (request_sent_) {
-          std::cout << "request sent " << std::endl;
+          std::cout << "adapt request sent " << std::endl;
           if (!response_received_) {
             std::cout << "no response received yet " << std::endl;
 
@@ -577,7 +635,7 @@ public:
           }
           if (response_received_) {
             request_sent_ = false;
-            std::cout << "response received" << std::endl;
+            std::cout << "adapt response received" << std::endl;
 
             //Response received
             if (chosen_child_status_ == NodeStatus::SUCCESS ||
@@ -598,6 +656,7 @@ public:
           }
           if (chosen_child_status_ == NodeStatus::RUNNING) {
             sendAdaptationRequests();
+            response_received_ = false;
             //The implication here is that adaptations during running happen between ticks.
           }
           if (chosen_child_status_ == NodeStatus::SUCCESS ||
@@ -609,6 +668,7 @@ public:
               child_status == chosen_child_status_)
             {
               sendAdaptationRequests();
+              response_received_ = false;
               return this->status();   //return Running despite success of child.
             }
 
@@ -764,6 +824,7 @@ public:
         }
         time_request_sent_ = node_->now();
       } else {
+        std::cout << "from idle response received true!" << std::endl;
         response_received_ = true; //Skipping over the response waiting logic.
       }
 
@@ -774,7 +835,7 @@ public:
       if (!response_received_) {
         callback_group_executor_.spin_some();
 
-        // std::cout << "no response received (yet)" << std::endl;
+        std::cout << "no response received (yet)" << std::endl;
 
         auto const nodelay = std::chrono::milliseconds(0);
 

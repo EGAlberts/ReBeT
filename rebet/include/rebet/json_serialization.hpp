@@ -1,17 +1,27 @@
+#pragma once
+
 #ifndef rebet__REBET_JSON_SERIALIZATION_HPP_
 #define rebet__REBET_JSON_SERIALIZATION_HPP_
 
-#include <nlohmann/json.hpp>
+#include "behaviortree_cpp/contrib/json.hpp"
 #include "behaviortree_cpp/json_export.h"
 #include <nav_msgs/msg/odometry.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/point.hpp>
+#include <geometry_msgs/msg/quaternion.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
+#include <sensor_msgs/msg/range.hpp>
+#include <sensor_msgs/msg/battery_state.hpp>
 #include <diagnostic_msgs/msg/key_value.hpp>
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include "rebet_msgs/msg/qr.hpp"
+#include "rebet_msgs/msg/measure.hpp"
+#include "rebet_msgs/msg/measures.hpp"
+#include "rebet_msgs/msg/objects_identified.hpp"
+#include "rebet/system_attribute_value.hpp"
 
 namespace nlohmann
 {
@@ -487,6 +497,93 @@ struct adl_serializer<std::vector<rebet_msgs::msg::QR>>
   }
 };
 
+template<>
+struct adl_serializer<rebet_msgs::msg::ObjectsIdentified>
+{
+  static void to_json(nlohmann::json & j, const rebet_msgs::msg::ObjectsIdentified & obj_identified)
+  {
+    j = {
+      {"stamp", {
+          {"sec", obj_identified.stamp.sec},
+          {"nanosec", obj_identified.stamp.nanosec}
+        }},
+      {"object_detected", obj_identified.object_detected},
+      {"object_names", obj_identified.object_names},
+      {"probabilities", obj_identified.probabilities}
+    };
+  }
+
+  static void from_json(const nlohmann::json & j, rebet_msgs::msg::ObjectsIdentified & obj_identified)
+  {
+    j.at("stamp").at("sec").get_to(obj_identified.stamp.sec);
+    j.at("stamp").at("nanosec").get_to(obj_identified.stamp.nanosec);
+    j.at("object_detected").get_to(obj_identified.object_detected);
+    j.at("object_names").get_to(obj_identified.object_names);
+    j.at("probabilities").get_to(obj_identified.probabilities);
+  }
+};
+
+template<>
+struct adl_serializer<std::vector<rebet_msgs::msg::ObjectsIdentified>>
+{
+  static void to_json(nlohmann::json & j, const std::vector<rebet_msgs::msg::ObjectsIdentified> & obj_list)
+  {
+    j = nlohmann::json::array();     // Initialize as a JSON array
+    for (const auto & obj : obj_list) {
+      j.push_back(obj);       // Will use the existing adl_serializer<rebet_msgs::msg::ObjectsIdentified>
+    }
+  }
+
+  static void from_json(const nlohmann::json & j, std::vector<rebet_msgs::msg::ObjectsIdentified> & obj_list)
+  {
+    obj_list.clear();     // Ensure the vector is empty before inserting elements
+    for (const auto & item : j) {
+      obj_list.push_back(item.get<rebet_msgs::msg::ObjectsIdentified>());       // Convert JSON object to QR message
+    }
+  }
+};
+
+
+
+// string monitor_function
+// string json_value
+
+template<>
+struct adl_serializer<rebet_msgs::msg::Measure>
+{
+  static void to_json(nlohmann::json & j, const rebet_msgs::msg::Measure & measure)
+  {
+    j = {
+      {"monitor_function", measure.monitor_function},
+      {"json_value", measure.json_value}
+    };
+  }
+
+  static void from_json(const nlohmann::json & j, rebet_msgs::msg::Measure & measure)
+  {
+    j.at("monitor_function").get_to(measure.monitor_function);
+    j.at("json_value").get_to(measure.json_value);
+  }
+};
+
+// rebet_msgs/Measure[] measures
+template<>
+struct adl_serializer<rebet_msgs::msg::Measures>
+{
+  static void to_json(nlohmann::json & j, const rebet_msgs::msg::Measures & measure)
+  {
+    j = {
+      {"measures", measure.measures}
+    };
+  }
+
+  static void from_json(const nlohmann::json & j, rebet_msgs::msg::Measures & measures)
+  {
+    j.at("measures").get_to(measures.measures);
+
+  }
+};
+
 }
 
 struct SerializerRegistration
@@ -509,6 +606,10 @@ struct SerializerRegistration
     BT::RegisterJsonDefinition<rebet::SystemAttributeValue>();
     BT::RegisterJsonDefinition<rebet_msgs::msg::QR>();
     BT::RegisterJsonDefinition<std::vector<rebet_msgs::msg::QR>>();
+    BT::RegisterJsonDefinition<rebet_msgs::msg::ObjectsIdentified>();
+    BT::RegisterJsonDefinition<std::vector<rebet_msgs::msg::ObjectsIdentified>>();
+    BT::RegisterJsonDefinition<rebet_msgs::msg::Measure>();
+    BT::RegisterJsonDefinition<rebet_msgs::msg::Measures>();
   }
 };
 

@@ -24,7 +24,7 @@
 #include <fstream>
 #include <iostream>
 #include <algorithm>
-#include <nlohmann/json.hpp>
+#include "behaviortree_cpp/contrib/json.hpp">
 #include <behaviortree_ros2/tree_execution_server.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 

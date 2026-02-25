@@ -287,7 +287,7 @@ protected:
   bool receiveAdaptationRequest(const rclcpp::FutureReturnCode & ret)
   {
 
-    auto const timeout = rclcpp::Duration::from_seconds(double(service_timeout_.count()*4) / 1000);
+    auto const timeout = rclcpp::Duration::from_seconds(double(service_timeout_.count()) / 1000);
 
     if (ret != rclcpp::FutureReturnCode::SUCCESS) {
       if ( (node_->now() - time_request_sent_) > timeout) {
@@ -657,7 +657,11 @@ public:
           if (chosen_child_status_ == NodeStatus::RUNNING) {
             sendAdaptationRequests();
             response_received_ = false;
-            //The implication here is that adaptations during running happen between ticks.
+            //The implication here is that adaptations during running happen between ticks. ???
+            const NodeStatus child_status = this->child_node_->executeTick();
+            //TODO: The above comment was a bad idea, but maybe account for the child not being running anymore
+
+            return defaultChildTickResolution(child_status);
           }
           if (chosen_child_status_ == NodeStatus::SUCCESS ||
             chosen_child_status_ == NodeStatus::FAILURE)

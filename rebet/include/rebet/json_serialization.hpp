@@ -498,6 +498,26 @@ struct adl_serializer<std::vector<rebet_msgs::msg::QR>>
 };
 
 template<>
+struct adl_serializer<std::vector<double>>
+{
+  static void to_json(nlohmann::json & j, const std::vector<double> & qr_list)
+  {
+    j = nlohmann::json::array();     // Initialize as a JSON array
+    for (const auto & qr : qr_list) {
+      j.push_back(qr);       // Will use the existing adl_serializer<double>
+    }
+  }
+
+  static void from_json(const nlohmann::json & j, std::vector<double> & qr_list)
+  {
+    qr_list.clear();     // Ensure the vector is empty before inserting elements
+    for (const auto & item : j) {
+      qr_list.push_back(item.get<double>());       // Convert JSON object to double
+    }
+  }
+};
+
+template<>
 struct adl_serializer<rebet_msgs::msg::ObjectsIdentified>
 {
   static void to_json(nlohmann::json & j, const rebet_msgs::msg::ObjectsIdentified & obj_identified)
@@ -610,6 +630,7 @@ struct SerializerRegistration
     BT::RegisterJsonDefinition<std::vector<rebet_msgs::msg::ObjectsIdentified>>();
     BT::RegisterJsonDefinition<rebet_msgs::msg::Measure>();
     BT::RegisterJsonDefinition<rebet_msgs::msg::Measures>();
+    BT::RegisterJsonDefinition<std::vector<double>>();
   }
 };
 

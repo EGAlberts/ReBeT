@@ -7,10 +7,13 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/duration.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
 
 #include "aal_msgs/srv/adapt_architecture_external.hpp"
 #include "aal_msgs/srv/adapt_architecture.hpp"
 #include "aal_msgs/srv/adapt_architecture_tactical.hpp"
+#include "aal_msgs/action/adapt_architecture_concurrent.hpp"
+
 
 
 #include "builtin_interfaces/msg/time.hpp"
@@ -203,6 +206,7 @@ protected:
   rclcpp::Client<aal_msgs::srv::AdaptArchitectureExternal>::SharedPtr external_adapt_client_;
   rclcpp::Client<aal_msgs::srv::AdaptArchitecture>::SharedPtr internal_adapt_client_;
   rclcpp::Client<aal_msgs::srv::AdaptArchitectureTactical>::SharedPtr tactical_adapt_client_;
+  rclcpp_action::Client<aal_msgs::action::AdaptArchitectureConcurrent>::SharedPtr concurrent_adapt_action_client_;
 
   std::vector<double> _current_utilities = {};
   bool response_received_ = false;
@@ -288,7 +292,6 @@ protected:
   {
 
     auto const timeout = rclcpp::Duration::from_seconds(double(service_timeout_.count()) / 1000);
-
     if (ret != rclcpp::FutureReturnCode::SUCCESS) {
       if ( (node_->now() - time_request_sent_) > timeout) {
         throw std::runtime_error(
@@ -695,6 +698,297 @@ protected:
   AdaptationType input_adaptation_type_;
   std::chrono::nanoseconds window_start_;
   rclcpp::executors::SingleThreadedExecutor callback_group_executor_;
+
+
+};
+
+class AdaptConcurrent : public AdaptNode, public virtual AdaptDecoratorBase
+{ //This is a special case of the Adapting while Running, where the adaptation action lives as long as the child's action.
+public:
+  AdaptConcurrent(const std::string & name, const NodeConfig & config)
+  : AdaptNode(name, config)
+  {
+    std::cout << "\n\n\n\nSomeone created me a AdaptConcurrent node!!!!\n\n\n\n\n" << std::endl;
+
+    auto curr_time_pointer = std::chrono::system_clock::now();
+    window_start_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      curr_time_pointer.time_since_epoch());
+  }
+
+  static PortsList providedPorts()
+  {
+    PortsList base_ports = AdaptNode::providedPorts();
+
+    PortsList child_ports = {
+    };
+    child_ports.merge(base_ports);
+
+    return child_ports;
+  }
+
+  void sendAdaptationGoal()
+  {
+    request_sent_ = true;
+    this->get_leaf();
+    concurrent_adapt_action_client_ = rclcpp_action::create_client<aal_msgs::action::AdaptArchitectureConcurrent>(node_, "/adapt_concurrent", callback_group_);
+    
+    goal_received_ = false;
+    future_goal_handle_ = {};
+
+    aal_msgs::action::AdaptArchitectureConcurrent::Goal goal;
+
+    aal_msgs::msg::ActionNodeDescription action_description;
+    action_description.registration_name = child_registration_name_;
+    action_description.interface_name = child_action_name_;
+    action_description.interface_kind = child_action_kind_;
+
+    goal.requirements = _requirements_in_effect;
+    goal.child_description = action_description;
+
+    rclcpp_action::Client<aal_msgs::action::AdaptArchitectureConcurrent>::SendGoalOptions goal_options;
+
+    goal_options.goal_response_callback =
+        [this](rclcpp_action::ClientGoalHandle<aal_msgs::action::AdaptArchitectureConcurrent>::SharedPtr const future_handle) {
+          auto goal_handle_ = future_handle.get();
+          if(!goal_handle_)
+          {
+             throw std::runtime_error(
+                "concurrent adaptation goal rejected");
+          }
+          else 
+          {
+            goal_received_ = true;
+          }
+        };
+
+      goal_options.result_callback = [this](const rclcpp_action::ClientGoalHandle<aal_msgs::action::AdaptArchitectureConcurrent>::WrappedResult& result) {
+      if(goal_handle_->get_goal_id() == result.goal_id)
+      {
+        response_received_ = true;
+      }
+    };
+      future_goal_handle_ = concurrent_adapt_action_client_->async_send_goal(goal, goal_options);
+      time_request_sent_ = node_->now();
+  }
+
+  //Copied over from bt_action_node.hpp in BehaviorTree.ROS2
+  void cancelGoal()
+  {
+    std::cout << "cancelling goal";
+
+    if(!goal_handle_)
+    {
+      std::cout << "no goal handle" << std::endl;
+
+      if(future_goal_handle_.valid())
+      {
+        // Here the discussion is if we should block or put a timer for the waiting
+        auto ret =
+            callback_group_executor_.spin_until_future_complete(future_goal_handle_, service_timeout_);
+        if(ret != rclcpp::FutureReturnCode::SUCCESS)
+        {
+          // In that case the goal was not accepted or timed out so probably we should do nothing.
+          return;
+        }
+        else
+        {
+          goal_handle_ = future_goal_handle_.get();
+          future_goal_handle_ = {};
+        }
+      }
+      else
+      {
+        return;
+      }
+    }
+      auto future_result = concurrent_adapt_action_client_->async_get_result(goal_handle_);
+      auto future_cancel = concurrent_adapt_action_client_->async_cancel_goal(goal_handle_);
+      constexpr auto SUCCESS = rclcpp::FutureReturnCode::SUCCESS;
+      auto const nodelay = std::chrono::milliseconds(0);
+
+      if(callback_group_executor_.spin_until_future_complete(future_cancel, service_timeout_) != SUCCESS)
+      {
+        throw std::runtime_error("Failed to cancel action server for concurrent");
+      }
+      else
+      {
+        std::cout << "Cancel succesS?" << std::endl;
+      }
+
+
+      if(callback_group_executor_.spin_until_future_complete(future_result, service_timeout_) != SUCCESS)
+      {
+        throw std::runtime_error("Failed to get result call failed for concurrent");
+      }
+      else
+      {
+        std::cout << "Result success?" << std::endl;
+      }
+  }
+
+  NodeStatus defaultChildTickResolution(NodeStatus child_tick_status)
+  {
+    if(!request_sent_)
+    {
+      switch (child_tick_status) {
+        case NodeStatus::SUCCESS:
+          this->resetChild();
+          std::cout << "success child in adapt dec" << std::endl;
+          return NodeStatus::SUCCESS;
+
+        case NodeStatus::FAILURE:
+          this->resetChild();
+          std::cout << "failure child in adapt dec" << std::endl;
+          return NodeStatus::FAILURE;
+
+        case NodeStatus::RUNNING:
+          //std::cout << "running child in adapt dec" << std::endl;
+
+          return NodeStatus::RUNNING;
+        case NodeStatus::SKIPPED:
+          std::cout << "skipped child in adapt dec" << std::endl;
+
+          return NodeStatus::SKIPPED;
+
+        case NodeStatus::IDLE:
+          throw LogicError("[", this->name(), "]: A child should not return IDLE");
+
+        default:
+          return this->status();
+      }
+    }
+    else{
+      switch (child_tick_status) {
+        case NodeStatus::SUCCESS:
+          this->resetChild();
+          cancelGoal();
+          std::cout << "success child after cancelling goal supposedly in adapt dec" << std::endl;
+          return NodeStatus::SUCCESS;
+
+        case NodeStatus::FAILURE:
+          this->resetChild();
+          cancelGoal();
+          std::cout << "failure child in adapt dec" << std::endl;
+          return NodeStatus::FAILURE;
+
+        case NodeStatus::RUNNING:
+          //std::cout << "running child in adapt dec" << std::endl;
+
+          return NodeStatus::RUNNING;
+        case NodeStatus::SKIPPED:
+          std::cout << "skipped child in adapt dec" << std::endl;
+
+          return NodeStatus::SKIPPED;
+
+        case NodeStatus::IDLE:
+          throw LogicError("[", this->name(), "]: A child should not return IDLE");
+
+        default:
+          return this->status();
+      }
+
+    }
+  }
+
+  NodeStatus tick() override {
+    // GetInput is not allowed in the constructor due to this issue: https://github.com/BehaviorTree/BehaviorTree.CPP/issues/948
+    auto type_res = getInput("adaptation_type", input_adaptation_type_);
+    auto child_res = getInput("child_status", chosen_child_status_);
+
+    auto effect_res = config().blackboard->get<std::vector<std::string>>("QRS_IN_EFFECT", _requirements_in_effect);
+
+    // OnStart
+    switch (this->status()) {
+      case NodeStatus::IDLE:
+        // Setup
+        callback_group_ =
+          node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+        callback_group_executor_.add_callback_group(
+          callback_group_,
+          node_->get_node_base_interface());
+
+        this->setStatus(NodeStatus::RUNNING);
+
+        response_received_ = false;
+
+        return status();
+
+
+      case NodeStatus::RUNNING:
+
+        if (request_sent_ && goal_received_) {
+          std::cout << "adapt goal sent  and received" << std::endl;
+          if (!response_received_) {
+            std::cout << "no response received yet " << std::endl;
+
+            callback_group_executor_.spin_some(); //Spin, may activate callbacks
+
+            const NodeStatus child_status = this->child_node_->executeTick();
+
+            return defaultChildTickResolution(child_status);
+          }
+          if (response_received_) {
+              throw LogicError(
+                "Got a response, while concurrent adaptation should only end by cancellation");
+          }
+        }
+        else if(request_sent_ && !goal_received_)
+        {
+          //Wait for goal
+          std::cout << "goal not accepted yet " << std::endl;
+
+          callback_group_executor_.spin_some();
+
+          // std::cout << "no response received (yet)" << std::endl;
+
+          auto const nodelay = std::chrono::milliseconds(0);
+
+          rclcpp::FutureReturnCode ret;
+
+          ret = callback_group_executor_.spin_until_future_complete(
+            future_goal_handle_,
+            nodelay);    
+            
+          auto const timeout = rclcpp::Duration::from_seconds(double(service_timeout_.count()) / 1000);
+          if (ret != rclcpp::FutureReturnCode::SUCCESS) {
+            if ( (node_->now() - time_request_sent_) > timeout) {
+              throw std::runtime_error(
+                      "ran out of time trying to request adaptation goal, is your adaptation logic working properly? ");
+            }
+          }
+          else
+          {
+            goal_received_ = true;
+            goal_handle_ = future_goal_handle_.get();
+            future_goal_handle_ = {};
+          }
+        }
+        else { //request not sent
+
+          sendAdaptationGoal();
+          response_received_ = false;
+          const NodeStatus child_status = this->child_node_->executeTick();
+
+          return defaultChildTickResolution(child_status);
+        }
+        return this->status();   //Keep waiting to receive response
+
+      default:
+        return this->status();
+
+
+    }
+  }
+
+protected:
+  bool request_sent_ = false;
+  bool goal_received_ = false;
+  NodeStatus chosen_child_status_;
+  AdaptationType input_adaptation_type_;
+  std::chrono::nanoseconds window_start_;
+  rclcpp_action::ClientGoalHandle<aal_msgs::action::AdaptArchitectureConcurrent>::SharedPtr goal_handle_;
+  rclcpp::executors::SingleThreadedExecutor callback_group_executor_;
+  std::shared_future<rclcpp_action::ClientGoalHandle<aal_msgs::action::AdaptArchitectureConcurrent>::SharedPtr> future_goal_handle_;
 
 
 };
